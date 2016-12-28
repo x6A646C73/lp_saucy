@@ -1,0 +1,29 @@
+NAME    simple
+ROWS
+ N COST
+ G LIM1
+ G LIM2
+ G LIM3
+ G LIM4
+COLUMNS
+    XONE  COST    1   LIM1    1
+    XONE  LIM4    1
+    XTWO  COST    1   LIM1    1
+    XTWO  LIM2    1
+    XTHREE  COST    1   LIM2    2
+    XTHREE  LIM3    2
+    XFOUR  COST    1   LIM3    1
+    XFOUR  LIM4    1
+RHS
+    RHS1    LIM1    1   LIM2    1
+    RHS1    LIM3    1   LIM4    1
+BOUNDS
+ LO  BND1    XONE  0
+ UP  BND1    XONE  1
+ LO  BND1    XTWO  0
+ UP  BND1    XTWO  1
+ LO  BND1    XTHREE  0
+ UP  BND1    XTHREE  1
+ LO  BND1    XFOUR  0
+ UP  BND1    XFOUR  1
+ENDATA
