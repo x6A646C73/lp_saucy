@@ -148,19 +148,16 @@ static int on_automorphism(int n, const int *gamma, int k, int *support, void *a
     return !timeout_flag;
 } /*}}} END on_automorphism*/
 
-//TODO: put on github for simplicity
 int main( int argc, char **argv )
 { //{{{
     // Declare variables
     //{{{
-    struct saucy *s;
-    struct lp_saucy *lps;
+    struct saucy *s, *s_bak;
     struct lp_amorph_graph *g = NULL;
     long cpu_time;
     int i;
     int temp, rep, repsize;
     int n, e, tw;
-    struct saucy_stats lp_stats;
     //}}}
     
     /* Option handling */
@@ -188,62 +185,18 @@ int main( int argc, char **argv )
     if( !marks ) die( "out of memory" );
     
     /* Allocate saucy space */
-    s = saucy_alloc( n, tw );
+    s = saucy_alloc( n, tw, digraph_mode, &g->sg, on_automorphism, g, &stats );
     if( s == NULL ) die( "saucy initialization failed" );
     
-    lps = lp_saucy_alloc( n );
-    if( lps == NULL ) die( "lp_saucy initialization failed" );
-    
-    //lps->is_automorphism = ( directed ) ? lp_is_directed_automorphism :
-    //                                      lp_is_undirected_automorphism;
-    lps->is_automorphism = lp_is_undirected_automorphism;
-    
-    /* The initial orbit partition is discrete */
-    for( i = 0; i < s->n; ++i )
-    { //{{{
-        s->theta[i] = i;
-        lps->theta[i] = i;
-    } //}}}
-    
-    /* The initial permutation is the identity */
-    for( i = 0; i < s->n; ++i )
-    { //{{{
-        s->gamma[i] = i;
-        lps->gamma[i] = i;
-    } //}}}
-    
-    /* Initially every cell of theta has one element */
-    for( i = 0; i < s->n; ++i )
-    { //{{{
-        s->thsize[i] = 1;
-        lps->thsize[i] = 1;
-    } //}}}
-    
-    /* Every theta rep list is singleton */
-    for( i = 0; i < s->n; ++i )
-    { //{{{
-        s->thprev[i] = s->thnext[i] = i;
-        lps->thprev[i] = lps->thnext[i] = i;
-    } //}}}
-    
-    /* Initialize stats */
-    s->stats = stats;
-    s->stats->grpsize_base = 1.0;
-    s->stats->grpsize_exp = 0;
-    s->stats->nodes = 1;
-    s->stats->bads = s->stats->gens = s->stats->support = 0;
-    lps->stats = lp_stats;
-    lps->stats->grpsize_base = 1.0;
-    lps->stats->grpsize_exp = 0;
-    lps->stats->nodes = 1;
-    lps->stats->bads = lps->stats->gens = lps->stats->support = 0;
+    s_bak = saucy_alloc( n, tw, digraph_mode, &g->sg, on_automorphism, g, &stats );
+    if( s_bak == NULL ) die( "saucy backup initialization failed" );
     
     /* Collect provided generators */
     if( genfile != NULL )
-    {
+    { //{{{
         num_gens = lp_warmup_theta( genfile, s );
-        memcpy( theta_bak, s->theta, (s->n)*sizeof(int) );
-    }
+        memcpy( s_bak, s, sizeof( s ) ); //TODO: versify this is correct
+    } //}}}
     
     /* Set up the alarm for timeouts */
     if( timeout > 0 ) platform_set_timer( timeout, timeout_handler );
@@ -251,6 +204,7 @@ int main( int argc, char **argv )
     /* Print statistics when signaled */
     platform_set_user_signal( stats_handler );
     
+    //TODO: fix output stuff
     /* Run the search */
     fflush( stdout );
     f = quiet_mode ? stdout : stderr;
@@ -258,18 +212,16 @@ int main( int argc, char **argv )
     { //{{{
         cpu_time = platform_clock();
 
-        saucy_search( s, &g->sg, digraph_mode, g->colors, on_automorphism, g,
-                      &stats );
+        saucy_search( s, g->colors );
         
         fprintf( f, "%e\n", divide( platform_clock() - cpu_time,
                  PLATFORM_CLOCKS_PER_SEC ) );
         
-        memcpy( s->theta, theta_bak, (s->n)*sizeof(int) );
+        memcpy( s, s_bak, sizeof( s_bak ) ); //TODO: verify this is correct
     } //}}}
     
     quiet_mode = 0;
-    saucy_search( s, &g->sg, digraph_mode, g->colors, on_automorphism, g,
-                  &stats );
+    saucy_search( s, g->colors );
     
     /* Finish timing */
     /* cpu_time = platform_clock() - cpu_time; */
@@ -297,7 +249,7 @@ int main( int argc, char **argv )
     
     /* Cleanup */
     saucy_free( s );
-    lp_saucy_free( lps );
+    saucy_free( s_bak );
     g->free( g );
     free( marks );
     

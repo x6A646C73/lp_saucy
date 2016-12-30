@@ -242,141 +242,35 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
     return g;
 } //}}} END amorph_build
 
-//TODO: fix this and automorph functions to work here
-static int check_mapping( struct lp_saucy *s, const int *adj, const int *edg, const int *wght, int k )
-{ //{{{
-    int i, gk, ret = 1;
-    
-    /* Mark gamma of neighbors */
-    for( i = adj[k]; i != adj[k+1]; ++i )
-    { //{{{
-        s->stuff[s->gamma[edg[i]]] = 1;
-        /* wstuff should only need n spots since a vertex */
-        /* can connect to at most n vertices */
-        s->wstuff[s->gamma[edg[i]]] = wght[i];
-    } //}}}
-    
-    /* Check neighbors of gamma */
-    gk = s->gamma[k];
-    for( i = adj[gk]; ret && i != adj[gk+1]; ++i )
-    { //{{{
-        ret = s->stuff[edg[i]];
-        /* TODO: verify that this is a valid test for weight data */
-        ret = ret && (wght[i] == s->wstuff[edg[i]]);
-    } //}}}
-    
-    /* Clear out bit vector before we leave */
-    for( i = adj[k]; i != adj[k+1]; ++i )
-    { //{{{
-        s->stuff[s->gamma[edg[i]]] = 0;
-        s->wstuff[s->gamma[edg[i]]] = 0;
-    } //}}}
-    
-    return ret;
-} //}}} END check_mapping
-
-int is_undirected_automorphism( struct lp_saucy *s )
-{ //{{{
-    int i, j;
-    
-    for( i = 0; i < s->ndiffs; ++i )
-    { //{{{
-        j = s->unsupp[i];
-        if( !check_mapping( s, s->adj, s->edg, s->wght, j ) ) return 0;
-    } //}}}
-    
-    return 1;
-} //}}} END is_undirected_automorphism
-
-int is_directed_automorphism( struct lp_saucy *s )
-{ //{{{
-    int i, j;
-    
-    for( i = 0; i < s->ndiffs; ++i )
-    { //{{{
-        j = s->unsupp[i];
-        if( !check_mapping( s, s->adj, s->edg, s->wght, j ) ) return 0;
-        if( !check_mapping( s, s->dadj, s->dedg, s->dwght, j ) ) return 0;
-    } //}}}
-    
-    return 1;
-} //}}} END is_directed_automorphism
-
-static int lp_find_representative( int k, int *theta )
-{ //{{{
-    int rep, tmp;
-    
-    /* Find the minimum cell representative */
-    for( rep = k; rep != theta[rep]; rep = theta[rep] );
-    
-    /* Update all intermediaries */
-    while( theta[k] != rep )
-    { //{{{
-        tmp = theta[k]; theta[k] = rep; k = tmp;
-    } //}}}
-    
-    return rep;
-} //}}} END lp_find_representative
-
-static void lp_multiply_index( struct lp_saucy *s, int k )
-{ //{{{
-    if( ( s->stats->grpsize_base *= k ) > 1e10 )
-    { //{{{
-        s->stats->grpsize_base /= 1e10;
-        s->stats->grpsize_exp += 10;
-    } //}}}
-} //}}} END lp_multiply_index
-
-// can optimize later...
-static void lp_update_theta( struct lp_saucy *s )
-{ //{{{
-    int i, x, y, tmp;
-    
-    for( i = 0; i < s->n; ++i )
-    { //{{{
-        if( s->gamma[i] == i ) continue;
-        
-        x = lp_find_representative( i, s->theta );
-        y = lp_find_representative( s->gamma[i], s->theta );
-        
-        if( x != y )
-        { //{{{
-            if( x > y )
-            { //{{{
-                tmp = x;
-                x = y;
-                y = tmp;
-            } //}}}
-            s->theta[y] = x;
-            s->thsize[x] += s->thsize[y];
-            
-            s->thnext[s->thprev[y]] = s->thnext[y];
-            s->thprev[s->thnext[y]] = s->thprev[y];
-            s->threp[s->thfront[y]] = s->thnext[y];
-        } //}}}
-    } //}}}
-} //}}} END update_theta
-
 //TODO: consider something other than text file?
-//TODO: use original saucy functions for this?
 int lp_warmup_theta( char *filename, struct lp_saucy *s )
 { //{{{
     std::ifstream file( filename );
-    int num_gens = i = 0;
+    int num_gens=0, i=0, temp;
     
     // generators are the whole perm: (0 1 2)(3 4) as 1 2 0 4 3
     file >> num_gens;
     while( i < num_gens && !file.eof )
     { //{{{
-        for( j = 0; j < s->n; ++j ) file >> s->gamma[j];
+        s->ndiffs = 0;
+        for( j = 0; j < s->n; ++j )
+        {   
+            file >> temp;
+            if( temp != j ) 
+            {
+                s->unsupp[s->ndiffs] = j;
+                ++(s->ndiffs);
+            }
+            s->gamma[j] = temp;
+        }
         
-        if( s->lp_is_automorphism( s ) )
+        if( s->is_automorphism( s ) )
         { //{{{
             ++s->stats->gens;
             //TODO: double check that this works
             //TODO: write a small test program for this with 1 2 0 4 3 as input
             //      then can determine what thnext, etc. hold as well...
-            lp_update_theta( s );
+            update_theta( s );
         } //}}}
         ++i;
     } //}}}
@@ -384,9 +278,9 @@ int lp_warmup_theta( char *filename, struct lp_saucy *s )
     i = 0;
     while( i < s->n )
     { //{{{
-        rep = lp_find_representative( i, s->theta );
+        rep = find_representative( i, s->theta );
         repsize = s->thsize[rep];
-        lp_multiply_index( s, repsize );
+        multiply_index( s, repsize );
         i += repsize;
     } //}}}
     
@@ -402,46 +296,3 @@ int lp_warmup_theta( char *filename, struct lp_saucy *s )
     return num_gens
 } //}}} END warmup_theta
 
-static int *ints( int n ) { return malloc( n * sizeof(int) ); }
-static char *bits( int n ) { return calloc( n, sizeof(char) ); }
-
-struct lp_saucy *lp_saucy_alloc( int n )
-{ //{{{
-    struct lp_saucy *s = (struct lp_saucy *)malloc( sizeof(struct lp_saucy) );
-    if( s == NULL ) return NULL;
-    
-    s->stuff = bits( n+1 );
-    s->wstuff = ints( n+1 );
-    s->gamma = ints( n );
-    s->theta = ints( n );
-    s->thsize = ints( n );
-    s->thnext = ints( n );
-    s->thprev = ints( n );
-    s->threp = ints( n );
-    s->thfront = ints( n );
-    
-    if( s->stuff && s->wstuff && s->gamma && s->theta && s->thsize
-        && s->thnext && s->thprev && s->threp && s->thfront )
-    { //{{{
-        return s;
-    } //}}}
-    else
-    { //{{{
-        saucy_free( s );
-        return NULL;
-    } //}}}
-} //}}} END lp_saucy_alloc
-
-void lp_saucy_free( struct saucy *s )
-{ //{{{
-    free( s->thfront );
-    free( s->threp );
-    free( s->thnext );
-    free( s->thprev );
-    free( s->thsize );
-    free( s->theta );
-    free( s->gamma );
-    free( s->stuff );
-    free( s->wstuff );
-    free( s );
-} //}}} END lp_saucy_free
