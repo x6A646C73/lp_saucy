@@ -1551,10 +1551,10 @@ void saucy_search( struct saucy *s, const int *colors )
     while( do_search( s ) );
 } //}}} END saucy_search
 
-static int *ints( int n ) { return malloc( n * sizeof(int) ); }
+static int *ints( int n ) { return (int *)malloc( n * sizeof(int) ); }
 /* static int *zeros( int n ) { return calloc( n, sizeof(int) ); } */
-static int *zeros( uint64_t n ) { return calloc( n, sizeof(int) ); } 
-static char *bits( int n ) { return calloc( n, sizeof(char) ); }
+static int *zeros( uint64_t n ) { return (int *)calloc( n, sizeof(int) ); } 
+static char *bits( int n ) { return (char *)calloc( n, sizeof(char) ); }
 
 struct saucy* saucy_alloc( int n, int w, int directed,
                            const struct saucy_graph *g,
@@ -1562,7 +1562,8 @@ struct saucy* saucy_alloc( int n, int w, int directed,
                            void *arg,
                            struct saucy_stats *stats )
 { //{{{
-    struct saucy *s = malloc( sizeof(struct saucy) );
+    int i;
+    struct saucy *s = (struct saucy *)malloc( sizeof(struct saucy) );
     if( s == NULL ) return NULL;
     
     // Allocate data {{{

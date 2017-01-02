@@ -12,9 +12,9 @@
 
 /* Static variables */
 //{{{
-static char *filename;   /* Graph file we're reading */
-static char *genfile;   /* Generator file we're reading */
-static char *outfile;   /* Output file we're using */
+static char *filename=NULL;   /* Graph file we're reading */
+static char *genfile=NULL;   /* Generator file we're reading */
+static char *outfile=NULL;   /* Output file we're using */
 static int timeout = 0;      /* Seconds before quitting after refinement */
 static sig_atomic_t timeout_flag = 0; /* Has the alarm gone off yet? */
 static int stats_mode;  /* Print out stats when we're done */
@@ -130,23 +130,23 @@ static void stats_handler(void)
 } //}}} END stats_handler
 
 static int on_automorphism(int n, const int *gamma, int k, int *support, void *arg)
-{ /*{{{*/
-    struct lp_amorph_graph *g = arg;
+{ //{{{
+    struct lp_amorph_graph *g = (struct lp_amorph_graph *)arg;
     
-    if (!quiet_mode) 
-    { /*{{{*/
+    if( !quiet_mode ) 
+    { //{{{
         qsort_integers(support, k);
-        if (gap_mode) 
-        { /*{{{*/
-            putchar(!first ? '[' : ',');
-            putchar('\n');
-            first = 1;
-        } /*}}}*/
+        //if( gap_mode ) 
+        //{ //{{{
+        //    putchar(!first ? '[' : ',');
+        //    putchar('\n');
+        //    first = 1;
+        //} //}}}
         g->consumer(n, gamma, k, support, g, marks);
-    } /*}}}*/
+    } //}}}
     
     return !timeout_flag;
-} /*}}} END on_automorphism*/
+} //}}} END on_automorphism
 
 int main( int argc, char **argv )
 { //{{{
@@ -155,17 +155,16 @@ int main( int argc, char **argv )
     struct saucy *s, *s_bak;
     struct lp_amorph_graph *g = NULL;
     long cpu_time;
-    int i;
+    int i, num_gens;
     int temp, rep, repsize;
     int n, e, tw;
+    FILE *f;
     //}}}
     
     /* Option handling */
     //TODO: make sure this fixes this since files have options now
     parse_arguments( &argc, &argv, options );
-    //if( argc < 1 ) die( "missing filename" );
     if( argc > 1 ) die( "trailing arguments" );
-    filename = *argv;
     
     /* Repeating is for benchmarking */
     if (repeat > 1) quiet_mode = stats_mode = 1;
@@ -181,21 +180,22 @@ int main( int argc, char **argv )
     tw = g->sg.w;
     
     /* Allocate some memory to facilitate printing */
-    marks = calloc( n, sizeof( char ) );
+    marks = (char *)calloc( n, sizeof( char ) );
     if( !marks ) die( "out of memory" );
     
     /* Allocate saucy space */
-    s = saucy_alloc( n, tw, digraph_mode, &g->sg, on_automorphism, g, &stats );
+    //NOTE: digraph_mode set to 0
+    s = saucy_alloc( n, tw, 0, &g->sg, on_automorphism, g, &stats );
     if( s == NULL ) die( "saucy initialization failed" );
     
-    s_bak = saucy_alloc( n, tw, digraph_mode, &g->sg, on_automorphism, g, &stats );
+    s_bak = saucy_alloc( n, tw, 0, &g->sg, on_automorphism, g, &stats );
     if( s_bak == NULL ) die( "saucy backup initialization failed" );
     
     /* Collect provided generators */
     if( genfile != NULL )
     { //{{{
         num_gens = lp_warmup_theta( genfile, s );
-        memcpy( s_bak, s, sizeof( s ) ); //TODO: versify this is correct
+        memcpy( s_bak, s, sizeof( struct saucy ) ); //TODO: versify this is correct
     } //}}}
     
     /* Set up the alarm for timeouts */
@@ -206,8 +206,10 @@ int main( int argc, char **argv )
     
     //TODO: fix output stuff
     /* Run the search */
-    fflush( stdout );
-    f = quiet_mode ? stdout : stderr;
+    if( outfile == NULL ) f = (quiet_mode) ? stderr : stdout;
+    else f = fopen( outfile, "r" );
+    fflush( f );
+    //f = quiet_mode ? stdout : stderr;
     for( i = 0; i < repeat; ++i )
     { //{{{
         cpu_time = platform_clock();
@@ -217,7 +219,7 @@ int main( int argc, char **argv )
         fprintf( f, "%e\n", divide( platform_clock() - cpu_time,
                  PLATFORM_CLOCKS_PER_SEC ) );
         
-        memcpy( s, s_bak, sizeof( s_bak ) ); //TODO: verify this is correct
+        memcpy( s, s_bak, sizeof( struct saucy ) ); //TODO: verify this is correct
     } //}}}
     
     quiet_mode = 0;
@@ -226,7 +228,7 @@ int main( int argc, char **argv )
     /* Finish timing */
     /* cpu_time = platform_clock() - cpu_time; */
     
-    if( gap_mode && !quiet_mode ) printf( "\n]\n" );
+    //if( gap_mode && !quiet_mode ) printf( "\n]\n" );
     
     /* Warn if timeout */
     if( timeout_flag ) warn( "search timed out" );

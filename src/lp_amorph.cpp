@@ -4,7 +4,7 @@
 #include <cstdio>
 #include "CoinLpIO.hpp"
 #include "CoinMpsIO.hpp"
-//#include "util.h" //gives die, warn, etc.
+#include "util.h"
 #include "lp_amorph.h"
 
 typedef std::map<double,int> colorMap;
@@ -134,18 +134,16 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
     int c1=0, c2=0, c3=0;
     // ILP variables
     int vars, cons, lp=1;
-    const double *obj, *rhs;
-    const CoinPackedMatrix *mat;
+    const double *obj=NULL, *rhs=NULL;
+    const CoinPackedMatrix *mat=NULL;
     //}}}
     
     lp = parse_filename( filename );
     if( lp == 1 ) readLP( filename, obj, rhs, vars, cons, mat );
     else if( lp == 0 ) readMPS( filename, obj, rhs, vars, cons, mat );
-    else
-    { //{{{
-        fprintf( stderr, "ERROR: must provide lp or mps file. Terminating..." );
-        return NULL;
-    } //}}}
+    else die( "must provide lp or mps file" );
+    if( mat == NULL || obj == NULL || rhs == NULL )
+        die( "failed to read problem file" );
     
     n = vars+cons;
     e = mat->getNumElements();
@@ -245,18 +243,19 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
 //TODO: consider something other than text file?
 int lp_warmup_theta( char *filename, struct saucy *s )
 { //{{{
-    std::ifstream file( filename );
+    FILE *file;
     int num_gens=0, i=0, j=0, temp;
     int rep, repsize;
     
     // generators are the whole perm: (0 1 2)(3 4) as 1 2 0 4 3
-    file >> num_gens;
-    while( i < num_gens && !file.eof )
+    file = fopen( filename, "r" );
+    fscanf( file, "%d", &num_gens );
+    while( i < num_gens && !feof( file ) )
     { //{{{
         s->ndiffs = 0;
         for( j = 0; j < s->n; ++j )
         {   
-            file >> temp;
+            fscanf( file, "%d", &temp );
             if( temp != j ) 
             {
                 s->unsupp[s->ndiffs] = j;
@@ -275,6 +274,7 @@ int lp_warmup_theta( char *filename, struct saucy *s )
         } //}}}
         ++i;
     } //}}}
+    fclose( file );
     
     i = 0;
     while( i < s->n )

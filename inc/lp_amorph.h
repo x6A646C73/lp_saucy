@@ -14,6 +14,6 @@ struct lp_amorph_graph {
 };
 
 struct lp_amorph_graph* lp_amorph_read_build( char *filename );
-int lp_warmup_theta( char *filename, struct lp_saucy *s );
+int lp_warmup_theta( char *filename, struct saucy *s );
 
 #endif
