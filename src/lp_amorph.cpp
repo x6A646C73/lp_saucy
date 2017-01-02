@@ -122,10 +122,10 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
 { //{{{
     // Variable declarations {{{
     int n, e;
-    int i, j, k, *aout, *eout, *colors;
+    int i, j, *aout, *eout, *colors;
     int tempk, tempj, tempw;
-    int w, *wout;
-    int ndx, col;
+    int *wout;
+    int col;
     const double *elm;
     const int *ind, *str;
     struct lp_amorph_graph *g = NULL;
@@ -155,12 +155,12 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
     aout = ( int* ) calloc( (n+1), sizeof(int) );
     eout = ( int* ) malloc( 2 * e * sizeof(int) );
     wout = ( int* ) malloc( 2 * e * sizeof(int) );
-    wlist = ( int* ) malloc( 2 * e * sizeof(int) );
+    //wlist = ( int* ) malloc( 2 * e * sizeof(int) );
     colors = ( int* ) malloc( n * sizeof(int) );
     if (!g || !aout || !eout || !colors)
     { //{{{
         free(g); free(aout); free(eout);
-        free(wout); free(wlist);    free(colors);
+        free(wout); free(colors); //free(wlist);
         return NULL;
     } //}}}
     //}}}
@@ -208,9 +208,9 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
     g->sg.w = c3;
     lp_init_fixadj1(n, aout);
 
-    for( i = 0; i < v; ++i )
+    for( i = 0; i < vars; ++i )
         colors[i] = varC.find( obj[i] )->second;
-    for( i = 0; i < c; ++i )
+    for( i = 0; i < cons; ++i )
         colors[i] = cosC.find( rhs[i] )->second;
     
     col = 0;
@@ -228,8 +228,8 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
         eout[tempj] =                 vars+ind[i]; 
         eout[tempk] =                         col;
         tempw       = conC.find( elm[i] )->second;
-        wout[tempj] =                           w; 
-        wout[tempk] =                           w;
+        wout[tempj] =                       tempw; 
+        wout[tempk] =                       tempw;
     } //}}}
     lp_init_fixadj2(n, 2 * e, aout);
     
@@ -243,10 +243,11 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
 } //}}} END amorph_build
 
 //TODO: consider something other than text file?
-int lp_warmup_theta( char *filename, struct lp_saucy *s )
+int lp_warmup_theta( char *filename, struct saucy *s )
 { //{{{
     std::ifstream file( filename );
-    int num_gens=0, i=0, temp;
+    int num_gens=0, i=0, j=0, temp;
+    int rep, repsize;
     
     // generators are the whole perm: (0 1 2)(3 4) as 1 2 0 4 3
     file >> num_gens;
@@ -293,6 +294,6 @@ int lp_warmup_theta( char *filename, struct lp_saucy *s )
 
     for( i = 0; i < s->n; ++i ) s->gamma[i] = i;
     
-    return num_gens
+    return num_gens;
 } //}}} END warmup_theta
 
