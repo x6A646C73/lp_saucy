@@ -164,6 +164,7 @@ int main( int argc, char **argv )
     /* Option handling */
     //TODO: make sure this fixes this since files have options now
     parse_arguments( &argc, &argv, options );
+    if( filename == NULL ) die( "no problem file provided" );
     if( argc > 1 ) die( "trailing arguments" );
     
     /* Repeating is for benchmarking */
