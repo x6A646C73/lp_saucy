@@ -87,7 +87,7 @@ static struct option options[] =
       "after N seconds, the next generator will be the last" },
     //{ "weight", 'w', 0, arg_wght,
     //  "use weighted graph version of linear program" },
-    { "help", 0, 0, arg_help,
+    { "help", 'h', 0, arg_help,
       "output this help message" },
     { "version", 0, 0, arg_version,
       "version information" },
@@ -163,6 +163,7 @@ int main( int argc, char **argv )
     
     /* Option handling */
     //TODO: make sure this fixes this since files have options now
+    //      nothing really
     parse_arguments( &argc, &argv, options );
     if( filename == NULL ) die( "no problem file provided" );
     if( argc > 1 ) die( "trailing arguments" );

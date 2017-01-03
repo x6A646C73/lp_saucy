@@ -16,7 +16,7 @@ CoinInc=/Users/jschrock/CoinUtils/build/include/coin
 CoinLib=/Users/jschrock/CoinUtils/build/lib
 CC=g++
 LDLIBS=-lz -lbz2 -lm -lCoinUtils
-CFLAGS=-ansi -pedantic -Wall -O3 -I$(IDIR) -I$(CoinInc) -L$(CoinLib)
+CFLAGS=-ansi -pedantic -Wall -Wno-write-strings -O3 -I$(IDIR) -I$(CoinInc) -L$(CoinLib)
 
 ODIR=obj
 BIN=../bin
