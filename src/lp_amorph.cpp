@@ -20,7 +20,7 @@ static int parse_filename( char *filename )
 } //}}} END parse_filename
 
 static void readLP( char *file, const double *obj, const double *rhs, int &vars,
-             int &cons, const CoinPackedMatrix *mat )
+                    int &cons, const CoinPackedMatrix *mat )
 { //{{{
     CoinLpIO prob;
     prob.readLp( file );
@@ -31,8 +31,8 @@ static void readLP( char *file, const double *obj, const double *rhs, int &vars,
     mat = prob.getMatrixByCol();     //contains weights for edges
 } //}}} END readLP
 
-static void readMPS( char *file, const double *obj, const double *rhs, int &vars,
-              int &cons, const CoinPackedMatrix *mat )
+static void readMPS( char *file, const double *&obj, const double *&rhs, int &vars,
+                     int &cons, const CoinPackedMatrix *&mat )
 { //{{{
     CoinMpsIO prob;
     prob.readMps( file, "mps" );
@@ -205,7 +205,7 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
     } //}}}
     g->sg.w = c3;
     lp_init_fixadj1(n, aout);
-
+    
     for( i = 0; i < vars; ++i )
         colors[i] = varC.find( obj[i] )->second;
     for( i = 0; i < cons; ++i )
@@ -239,61 +239,3 @@ struct lp_amorph_graph* lp_amorph_read_build( char *filename )
     
     return g;
 } //}}} END amorph_build
-
-//TODO: consider something other than text file?
-int lp_warmup_theta( char *filename, struct saucy *s )
-{ //{{{
-    FILE *file;
-    int num_gens=0, i=0, j=0, temp;
-    int rep, repsize;
-    
-    // generators are the whole perm: (0 1 2)(3 4) as 1 2 0 4 3
-    file = fopen( filename, "r" );
-    fscanf( file, "%d", &num_gens );
-    while( i < num_gens && !feof( file ) )
-    { //{{{
-        s->ndiffs = 0;
-        for( j = 0; j < s->n; ++j )
-        {   
-            fscanf( file, "%d", &temp );
-            if( temp != j ) 
-            {
-                s->unsupp[s->ndiffs] = j;
-                ++(s->ndiffs);
-            }
-            s->gamma[j] = temp;
-        }
-        
-        if( s->is_automorphism( s ) )
-        { //{{{
-            ++s->stats->gens;
-            //TODO: double check that this works
-            //TODO: write a small test program for this with 1 2 0 4 3 as input
-            //      then can determine what thnext, etc. hold as well...
-            update_theta( s );
-        } //}}}
-        ++i;
-    } //}}}
-    fclose( file );
-    
-    i = 0;
-    while( i < s->n )
-    { //{{{
-        rep = find_representative( i, s->theta );
-        repsize = s->thsize[rep];
-        multiply_index( s, repsize );
-        i += repsize;
-    } //}}}
-    
-    /* Normalize group size */
-    while( s->stats->grpsize_base >= 10.0 )
-    { //{{{
-        s->stats->grpsize_base /= 10;
-        ++s->stats->grpsize_exp;
-    } //}}}
-
-    for( i = 0; i < s->n; ++i ) s->gamma[i] = i;
-    
-    return num_gens;
-} //}}} END warmup_theta
-

@@ -24,6 +24,9 @@ BIN=../bin
 _DEPS = saucy.h lp_amorph.h util.h platform.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
+_OBJ = util.o lp_amorph.o saucy.o P2Graph.o
+OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
+
 _OBJ2-5 = util.o lp_amorph.o saucy2-5.o P2Graph.o
 OBJ2-5 = $(patsubst %,$(ODIR)/%,$(_OBJ2-5))
 
@@ -31,10 +34,13 @@ OBJ2-5 = $(patsubst %,$(ODIR)/%,$(_OBJ2-5))
 $(ODIR)/%.o: %.cpp $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-all: saucy2-5 
+all: saucy saucy2-5 
 
 #Build saucy with weighted edges and refinement technique 2:
 #   count number of different weights between vertex and refining cell
+saucy: $(OBJ)
+	$(CC) -o $(BIN)/$@ $^ $(CFLAGS) $(LDLIBS)
+
 saucy2-5: $(OBJ2-5)
 	$(CC) -o $(BIN)/$@ $^ $(CFLAGS) $(LDLIBS)
 

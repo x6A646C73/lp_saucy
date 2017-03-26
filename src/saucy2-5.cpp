@@ -15,10 +15,113 @@
 #include <cstdint>
 
 #include "saucy.h"
+#include "lp_saucy.h"
 
 /* #define DCCOUNT(i, j) (s->dccount[(i)*s->e + (j)]) */
 #define DCCOUNT(i, j) (s->dccount[(i)*s->wcount + (j)])
 /* TODO: consider using unsigned ints/longs for everything */
+
+struct coloring
+{ //{{{
+    int *lab;        /* Labelling of objects */
+    int *unlab;      /* Inverse of lab */
+    int *cfront;     /* Pointer to front of cells */
+    int *clen;       /* Length of cells (defined for cfront's) */
+}; //}}} END coloring
+
+struct saucy
+{ //{{{
+    /* Graph data */
+    uint64_t n;       /* Size of domain */
+    uint64_t wcount;  /* number of edge colors */
+    const int *adj;   /* Neighbors of k: edg[adj[k]]..edg[adj[k+1]] */
+    //NOTE: this is the range from adj[k] to adj[k+1], that is edges from adj[k]
+    //      to adj[k+1]-1 adj[k] holds the index for the start of neighbors in
+    //      *edg
+    const int *edg;   /* Actual neighbor data */
+    const int *wght;  /* Actual edge colors */
+    const int *dadj;  /* Fanin neighbor indices, for digraphs */
+    const int *dedg;  /* Fanin neighbor data, for digraphs */
+    const int *dwght; /* Fanin weight data, for digraphs */
+    void *arg;        /* Opaque client data */
+
+    /* Coloring data */
+    struct coloring left, right;
+    int *nextnon;    /* Forward next-nonsingleton pointers */ 
+    int *prevnon;    /* Backward next-nonsingleton pointers */
+
+    /* Refinement: inducers */
+    char *indmark;   /* Induce marks */
+    int *ninduce;    /* Nonsingletons that might induce refinement */
+    int *sinduce;    /* Singletons that might induce refinement */
+    int nninduce;    /* Size of ninduce stack */
+    int nsinduce;    /* Size of sinduce stack */
+
+    /* Refinement: marked cells */
+    int *clist;      /* List of cells marked for refining */
+    int csize;       /* Number of cells in clist */
+
+    /* Refinement: workspace */
+    char *stuff;     /* Bit vector, but one char per bit */
+    int *wstuff;     /* weight data */
+    int *ccount;     /* Number of connections to refining cell */
+    int *dccount;     /* Number of connections to refining cell */
+    int *bucket;     /* Workspace */
+    int *count;      /* Num vertices with same adj count to ref cell */
+    int *junk;       /* More workspace */
+    int *diffL;   /* Weight workspace */
+    int *gamma;      /* Working permutation */
+    int *conncnts;   /* Connection counts for cell fronts */
+
+    /* Search data */
+    int lev;         /* Current search tree level */
+    int anc;         /* Level of greatest common ancestor with zeta */
+    int *anctar;     /* Copy of target cell at anc */
+    int kanctar;     /* Location within anctar to iterate from */
+    int *start;      /* Location of target at each level */
+    int indmin;      /* Used for group size computation */
+    int match;       /* Have we not diverged from previous left? */
+
+    /* Search: orbit partition */
+    int *theta;      /* Running approximation of orbit partition */
+    int *thsize;     /* Size of cells in theta, defined for mcrs */
+    int *thnext;     /* Next rep in list (circular list) */
+    int *thprev;     /* Previous rep in list */
+    int *threp;      /* First rep for a given cell front */
+    int *thfront;    /* The cell front associated with this rep */
+
+    /* Search: split record */
+    int *splitwho;   /* List of where splits occurred */
+    int *splitfrom;  /* List of cells which were split */
+    int *splitlev;   /* Where splitwho/from begins for each level */
+    int nsplits;     /* Number of splits at this point */
+
+    /* Search: differences from leftmost */
+    char *diffmark;  /* Marked for diff labels */
+    int *diffs;      /* List of diff labels */
+    int *difflev;    /* How many labels diffed at each level */
+    int ndiffs;      /* Current number of diffs */
+    int *undifflev;  /* How many diff labels fixed at each level */
+    int nundiffs;    /* Current number of diffs in singletons (fixed) */
+    int *unsupp;     /* Inverted diff array */
+    int *specmin;    /* Speculated mappings */
+    int *pairs;      /* Not-undiffed diffs that can make two-cycles */
+    int *unpairs;    /* Indices into pairs */
+    int npairs;      /* Number of such pairs */
+    int *diffnons;   /* Diffs that haven't been undiffed */
+    int *undiffnons; /* Inverse of that */
+    int ndiffnons;   /* Number of such diffs */
+
+    /* Polymorphic functions */
+    saucy_consumer *consumer;
+    int (*split)(struct saucy *, struct coloring *, int, int);
+    int (*is_automorphism)(struct saucy *);
+    int (*ref_singleton)(struct saucy *, struct coloring *, int);
+    int (*ref_nonsingle)(struct saucy *, struct coloring *, int);
+
+     /* Statistics structure */
+    struct saucy_stats *stats;
+}; //}}} END saucy
 
 static int array_find_min( const int *a, int n )
 { //{{{
@@ -1452,7 +1555,16 @@ static int do_search( struct saucy *s )
     return 0;
 } //}}} END do_search
 
-void saucy_search( struct saucy *s, const int *colors )
+void saucy_search(
+    struct saucy *s,
+    const struct saucy_graph *graph,
+    int directed,
+    const int *colors,
+    saucy_consumer *consumer,
+    void *arg,
+    struct saucy_stats *stats,
+    const int *thprev, const int *thnext, const int *thfront,
+    const int *threp, const int *thsize, const int *theta );
 { //{{{
     int i, j, max = 0;
     
@@ -1460,6 +1572,59 @@ void saucy_search( struct saucy *s, const int *colors )
     s->indmin = 0;
     s->lev = s->anc = 1;
     s->ndiffs = s->nundiffs = s->ndiffnons = 0;
+    
+    /* Save client information */
+    s->stats = stats;
+    s->arg = arg;
+    s->consumer = consumer;
+    
+    /* Save graph information */
+    s->n = g->n;
+    s->wcount = g->w;
+    s->adj = g->adj;
+    s->edg = g->edg;
+    s->wght = g->wght;
+    s->dadj = g->adj + g->n + 1;
+    s->dedg = g->edg + g->e;
+    s->dwght = g->wght + g->e;
+    
+    /* Polymorphism */
+    if( directed )
+    { //{{{
+        s->is_automorphism = is_directed_automorphism;
+        s->ref_singleton = ref_singleton_directed;
+        s->ref_nonsingle = ref_nonsingle_directed;
+    } //}}}
+    else
+    { //{{{
+        s->is_automorphism = is_undirected_automorphism;
+        s->ref_singleton = ref_singleton_undirected;
+        s->ref_nonsingle = ref_nonsingle_undirected;
+    } //}}}
+    
+    /* The initial orbit partition is discrete */
+    for( i = 0; i < s->n; ++i ) s->theta[i] = theta[i];
+    
+    /* The initial permutation is the identity */
+    for( i = 0; i < s->n; ++i ) s->gamma[i] = i;
+    
+    /* Initially every cell of theta has one element */
+    for( i = 0; i < s->n; ++i ) s->thsize[i] = thsize[i];
+    for( i = 0; i < s->n; ++i ) s->thfront[i] = thfront[i];
+    for( i = 0; i < s->n; ++i ) s->threp[i] = threp[i];
+    
+    /* Every theta rep list is singleton */
+    for( i = 0; i < s->n; ++i ) 
+    { //{{{
+        s->thprev[i] = thprev[i];
+        s->thnext[i] = thnext[i];
+    } //}}}
+    
+    /* Initialize stats */
+    //s->stats->grpsize_base = 1.0;
+    //s->stats->grpsize_exp = 0;
+    //s->stats->nodes = 1;
+    //s->stats->bads = s->stats->gens = s->stats->support = 0;
     
     /* We have no pairs yet */
     s->npairs = 0;
@@ -1556,11 +1721,7 @@ static int *ints( int n ) { return (int *)malloc( n * sizeof(int) ); }
 static int *zeros( uint64_t n ) { return (int *)calloc( n, sizeof(int) ); } 
 static char *bits( int n ) { return (char *)calloc( n, sizeof(char) ); }
 
-struct saucy* saucy_alloc( int n, int w, int directed,
-                           const struct saucy_graph *g,
-                           saucy_consumer *consumer,
-                           void *arg,
-                           struct saucy_stats *stats )
+struct saucy *saucy_alloc( int n, int w )
 { //{{{
     int i;
     struct saucy *s = (struct saucy *)malloc( sizeof(struct saucy) );
@@ -1613,53 +1774,6 @@ struct saucy* saucy_alloc( int n, int w, int directed,
     s->diffnons = ints( n );
     s->undiffnons = ints( n );
     //}}}
-    
-    /* Save client information */
-    s->stats = stats;
-    s->arg = arg;
-    s->consumer = consumer;
-    
-    /* Save graph information */
-    s->n = g->n;
-    s->wcount = g->w;
-    s->adj = g->adj;
-    s->edg = g->edg;
-    s->wght = g->wght;
-    s->dadj = g->adj + g->n + 1;
-    s->dedg = g->edg + g->e;
-    s->dwght = g->wght + g->e;
-    
-    /* Polymorphism */
-    if( directed )
-    { //{{{
-        s->is_automorphism = is_directed_automorphism;
-        s->ref_singleton = ref_singleton_directed;
-        s->ref_nonsingle = ref_nonsingle_directed;
-    } //}}}
-    else
-    { //{{{
-        s->is_automorphism = is_undirected_automorphism;
-        s->ref_singleton = ref_singleton_undirected;
-        s->ref_nonsingle = ref_nonsingle_undirected;
-    } //}}}
-    
-    /* The initial orbit partition is discrete */
-    for( i = 0; i < s->n; ++i ) s->theta[i] = i;
-    
-    /* The initial permutation is the identity */
-    for( i = 0; i < s->n; ++i ) s->gamma[i] = i;
-    
-    /* Initially every cell of theta has one element */
-    for( i = 0; i < s->n; ++i ) s->thsize[i] = 1;
-    
-    /* Every theta rep list is singleton */
-    for( i = 0; i < s->n; ++i ) s->thprev[i] = s->thnext[i] = i;
-    
-    /* Initialize stats */
-    s->stats->grpsize_base = 1.0;
-    s->stats->grpsize_exp = 0;
-    s->stats->nodes = 1;
-    s->stats->bads = s->stats->gens = s->stats->support = 0;
     
     if( s->ninduce && s->sinduce && s->left.cfront && s->left.clen
         && s->right.cfront && s->right.clen
