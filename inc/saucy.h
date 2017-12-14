@@ -7,8 +7,7 @@ typedef int saucy_consumer(int, const int *, int, int *, void *);
 
 struct saucy;
 
-struct saucy_stats
-{ //{{{
+struct saucy_stats {
     double grpsize_base;
     int grpsize_exp;
     int levels;
@@ -16,19 +15,18 @@ struct saucy_stats
     int bads;
     int gens;
     int support;
-}; //}}} END saucy_stats
+};
 
-struct saucy_graph
-{ //{{{
+struct saucy_graph {
     int n;
     int e;
     int w;
     int *adj;
     int *edg;
     int *wght;
-}; //}}} END saucy_graph
-                                                                                
-struct saucy *saucy_alloc( int n, int w );
+};
+
+struct saucy *saucy_alloc(int n, int w);
 
 void saucy_search(
     struct saucy *s,
@@ -37,8 +35,8 @@ void saucy_search(
     const int *colors,
     saucy_consumer *consumer,
     void *arg,
-    struct saucy_stats *stats );
+    struct saucy_stats *stats);
 
-void saucy_free( struct saucy *s );
+void saucy_free(struct saucy *s);
 
 #endif
