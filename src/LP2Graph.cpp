@@ -11,6 +11,8 @@
 #include "CoinMpsIO.hpp"
 
 
+//TODO: move reading functions out of here...
+//      create lp_saucyio.{h,cpp}
 void amorph_graph_free( struct amorph_graph *g )
 {
     free(g->sg.adj);
@@ -126,6 +128,7 @@ static int dupe_check( int n, int *adj, int *edg )
     return 0;
 }
 
+//TODO: duplicate for lp files or regular graph files
 struct amorph_graph* amorph_read( const char *filename )
 {
     int i, j, vars, cons;
