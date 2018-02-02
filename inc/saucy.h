@@ -22,6 +22,7 @@ struct saucy_graph {
     int e;
     int w;
     int *adj;
+    int *adj2;
     int *edg;
     int *wght;
 };

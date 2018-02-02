@@ -36,10 +36,13 @@ struct saucy {
     uint64_t n;           /* Size of domain */
     /*int e;*/           /* number of edges */
     uint64_t wcount;      /* number of edge colors */
+    /* for( i = adj[k]; i < adj2[k]; i++ ){ edg[i]; }*/
     const int *adj;  /* Neighbors of k: edg[adj[k]]..edg[adj[k+1]] */
+    const int *adj2;  /* Neighbors of k: edg[adj[k]]..edg[adj[k+1]] */
     const int *edg;  /* Actual neighbor data */
     const int *wght;  /* Actual edge colors */
     const int *dadj; /* Fanin neighbor indices, for digraphs */
+    const int *dadj2; /* Fanin neighbor indices, for digraphs */
     const int *dedg; /* Fanin neighbor data, for digraphs */
     const int *dwght; /* Fanin weight data, for digraphs */
     void *arg;       /* Opaque client data */
@@ -338,12 +341,15 @@ data_count(struct saucy *s, struct coloring *c, int k)
 }
 
 static int
-check_mapping(struct saucy *s, const int *adj, const int *edg, const int *wght, int k)
+//check_mapping(struct saucy *s, const int *adj, const int *edg, const int *wght, int k)
+check_mapping( struct saucy *s, const int *adj, const int *adj2, const int *edg,
+               const int *wght, int k )
 {
     int i, gk, ret = 1;
 
     /* Mark gamma of neighbors */
-    for (i = adj[k]; i != adj[k+1]; ++i) {
+    //for (i = adj[k]; i != adj[k+1]; ++i) {
+    for (i = adj[k]; i != adj2[k]; ++i) {
         s->stuff[s->gamma[edg[i]]] = 1;
         /* wstuff should only need n spots since a vertex */
         /* can connect to at most n vertices */
@@ -352,14 +358,16 @@ check_mapping(struct saucy *s, const int *adj, const int *edg, const int *wght, 
 
     /* Check neighbors of gamma */
     gk = s->gamma[k];
-    for (i = adj[gk]; ret && i != adj[gk+1]; ++i) {
+    //for (i = adj[gk]; ret && i != adj[gk+1]; ++i) {
+    for (i = adj[gk]; ret && i != adj2[gk]; ++i) {
         ret = s->stuff[edg[i]];
         /* TODO: verify that this is a valid test for weight data */
         ret = ret && (wght[i] == s->wstuff[edg[i]]);
     }
 
     /* Clear out bit vector before we leave */
-    for (i = adj[k]; i != adj[k+1]; ++i) {
+    //for (i = adj[k]; i != adj[k+1]; ++i) {
+    for (i = adj[k]; i != adj2[k]; ++i) {
         s->stuff[s->gamma[edg[i]]] = 0;
         s->wstuff[s->gamma[edg[i]]] = 0;
     }
@@ -374,7 +382,8 @@ is_undirected_automorphism(struct saucy *s)
 
     for (i = 0; i < s->ndiffs; ++i) {
         j = s->unsupp[i];
-        if (!check_mapping(s, s->adj, s->edg, s->wght, j)) return 0;
+        //if (!check_mapping(s, s->adj, s->edg, s->wght, j)) return 0;
+        if (!check_mapping(s, s->adj, s->adj2, s->edg, s->wght, j)) return 0;
     }
     return 1;
 }
@@ -386,8 +395,10 @@ is_directed_automorphism(struct saucy *s)
 
     for (i = 0; i < s->ndiffs; ++i) {
         j = s->unsupp[i];
-        if (!check_mapping(s, s->adj, s->edg, s->wght, j)) return 0;
-        if (!check_mapping(s, s->dadj, s->dedg, s->dwght, j)) return 0;
+        //if (!check_mapping(s, s->adj, s->edg, s->wght, j)) return 0;
+        //if (!check_mapping(s, s->dadj, s->dedg, s->dwght, j)) return 0;
+        if (!check_mapping(s, s->adj, s->adj2, s->edg, s->wght, j)) return 0;
+        if (!check_mapping(s, s->dadj, s->dadj2, s->dedg, s->dwght, j)) return 0;
     }
     return 1;
 }
@@ -731,13 +742,15 @@ ref_single_cell(struct saucy *s, struct coloring *c, int cf)
 
 static int
 ref_singleton(struct saucy *s, struct coloring *c,
-    const int *adj, const int *edg, const int *wght, int cf)
+    //const int *adj, const int *edg, const int *wght, int cf)
+    const int *adj, const int *adj2, const int *edg, const int *wght, int cf)
 {
     int i, j, k = c->lab[cf], temp;
     int wcount = 0;
     int ret = 1;
 
-    for( i = adj[k]; i != adj[k+1]; ++i ){
+    //for( i = adj[k]; i != adj[k+1]; ++i ){
+    for( i = adj[k]; i != adj2[k]; ++i ){
         /*
             list of length p (number of edge colors)
             dccount is n x p
@@ -786,14 +799,17 @@ ref_singleton(struct saucy *s, struct coloring *c,
 static int
 ref_singleton_directed(struct saucy *s, struct coloring *c, int cf)
 {
-    return ref_singleton(s, c, s->adj, s->edg, s->wght, cf)
-        && ref_singleton(s, c, s->dadj, s->dedg, s->dwght, cf);
+    //return ref_singleton(s, c, s->adj, s->edg, s->wght, cf)
+    //    && ref_singleton(s, c, s->dadj, s->dedg, s->dwght, cf);
+    return ref_singleton(s, c, s->adj, s->adj2, s->edg, s->wght, cf)
+        && ref_singleton(s, c, s->dadj, s->dadj2, s->dedg, s->dwght, cf);
 }
 
 static int
 ref_singleton_undirected(struct saucy *s, struct coloring *c, int cf)
 {
-    return ref_singleton(s, c, s->adj, s->edg, s->wght, cf);
+    //return ref_singleton(s, c, s->adj, s->edg, s->wght, cf);
+    return ref_singleton(s, c, s->adj, s->adj2, s->edg, s->wght, cf);
 }
 
 static int
@@ -855,7 +871,8 @@ ref_nonsingle_cell( struct saucy *s, struct coloring *c, int cf )
 
 static int
 ref_nonsingle(struct saucy *s, struct coloring *c,
-    const int *adj, const int *edg, const int *wght, int cf)
+    //const int *adj, const int *edg, const int *wght, int cf)
+    const int *adj, const int *adj2, const int *edg, const int *wght, int cf)
 {
     int i, j, k, temp;
     int wcount = 0;
@@ -865,7 +882,8 @@ ref_nonsingle(struct saucy *s, struct coloring *c,
 
     /* Double check for nonsingles which became singles later */
     if (cf == cb) {
-        return ref_singleton(s, c, adj, edg, wght, cf);
+        //return ref_singleton(s, c, adj, edg, wght, cf);
+        return ref_singleton(s, c, adj, adj2, edg, wght, cf);
     }
 
     /* Establish connected list */
@@ -874,7 +892,8 @@ ref_nonsingle(struct saucy *s, struct coloring *c,
     memcpy(s->junk, c->lab + cf, size * sizeof(int));
     for( i = 0; i < size; ++i ){
         k = s->junk[i];
-        for( j = adj[k]; j != adj[k+1]; ++j ){
+        //for( j = adj[k]; j != adj[k+1]; ++j ){
+        for( j = adj[k]; j != adj2[k]; ++j ){
             if( !DCCOUNT(0, wght[j]) ){
                 s->diffL[wcount] = wght[j];
                 ++wcount;
@@ -922,15 +941,18 @@ static int
 ref_nonsingle_directed(struct saucy *s, struct coloring *c, int cf)
 {
     /* added weight data as a parameter - Schrock */
-    return ref_nonsingle(s, c, s->adj, s->edg, s->wght, cf)
-        && ref_nonsingle(s, c, s->dadj, s->dedg, s->dwght, cf);
+    //return ref_nonsingle(s, c, s->adj, s->edg, s->wght, cf)
+    //    && ref_nonsingle(s, c, s->dadj, s->dedg, s->dwght, cf);
+    return ref_nonsingle(s, c, s->adj, s->adj2, s->edg, s->wght, cf)
+        && ref_nonsingle(s, c, s->dadj, s->dadj2, s->dedg, s->dwght, cf);
 }
 
 static int
 ref_nonsingle_undirected(struct saucy *s, struct coloring *c, int cf)
 {
     /* added weight data as a parameter - Schrock */
-    return ref_nonsingle(s, c, s->adj, s->edg, s->wght, cf);
+    //return ref_nonsingle(s, c, s->adj, s->edg, s->wght, cf);
+    return ref_nonsingle(s, c, s->adj, s->adj2, s->edg, s->wght, cf);
 }
 
 static void
@@ -1007,13 +1029,15 @@ descend(struct saucy *s, struct coloring *c, int target, int min)
         for (i = s->nsplits - 1; i > s->splitlev[s->lev-1]; --i) {
             v = c->lab[s->splitwho[i]];
             sum1 = xor1 = 0;
-            for (j = s->adj[v]; j < s->adj[v+1]; j++) {
+            //for (j = s->adj[v]; j < s->adj[v+1]; j++) {
+            for (j = s->adj[v]; j < s->adj2[v]; j++) {
                 sum1 += c->cfront[s->edg[j]];
                 xor1 ^= c->cfront[s->edg[j]];
             }
             v = s->left.lab[s->splitwho[i]];
             sum2 = xor2 = 0;
-            for (j = s->adj[v]; j < s->adj[v+1]; j++) {
+            //for (j = s->adj[v]; j < s->adj[v+1]; j++) {
+            for (j = s->adj[v]; j < s->adj2[v]; j++) {
                 sum2 += s->left.cfront[s->edg[j]];
                 xor2 ^= s->left.cfront[s->edg[j]];
             }
@@ -1023,13 +1047,15 @@ descend(struct saucy *s, struct coloring *c, int target, int min)
             }
             v = c->lab[s->splitfrom[i]];
             sum1 = xor1 = 0;
-            for (j = s->adj[v]; j < s->adj[v+1]; j++) {
+            //for (j = s->adj[v]; j < s->adj[v+1]; j++) {
+            for (j = s->adj[v]; j < s->adj2[v]; j++) {
                 sum1 += c->cfront[s->edg[j]];
                 xor1 ^= c->cfront[s->edg[j]];
             }
             v = s->left.lab[s->splitfrom[i]];
             sum2 = xor2 = 0;
-            for (j = s->adj[v]; j < s->adj[v+1]; j++) {
+            //for (j = s->adj[v]; j < s->adj[v+1]; j++) {
+            for (j = s->adj[v]; j < s->adj2[v]; j++) {
                 sum2 += s->left.cfront[s->edg[j]];
                 xor2 ^= s->left.cfront[s->edg[j]];
             }
@@ -1458,7 +1484,6 @@ do_search(struct saucy *s)
 
     /* Keep going while there are tree nodes to expand */
     while (s->lev) {
-
         /* Descend to a new leaf node */    
         if (descend(s, &s->right, s->start[s->lev], min)
                 && descend_left(s)) {
@@ -1514,9 +1539,11 @@ saucy_search(
     /*s->e = g->e;*/
     s->wcount = g->w;
     s->adj = g->adj;
+    s->adj2 = g->adj2;
     s->edg = g->edg;
     s->wght = g->wght;
-    s->dadj = g->adj + g->n + 1;
+    s->dadj = g->adj + g->n;
+    s->dadj2 = g->adj2 + g->n;
     s->dedg = g->edg + g->e;
     s->dwght = g->wght + g->e;
 
