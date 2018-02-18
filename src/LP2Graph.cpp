@@ -75,6 +75,7 @@ static void print_stats( FILE *f )
 {
     fprintf( f, "group size = %fe%d\n",
              stats.grpsize_base, stats.grpsize_exp );
+    fprintf( f, "orbit size = %d\n", stats.orbits );
     fprintf( f, "levels = %d\n", stats.levels );
     fprintf( f, "nodes = %d\n", stats.nodes );
     fprintf( f, "generators = %d\n", stats.gens );

@@ -15,16 +15,14 @@
 
 static const char *progname;
 
-static void
-vwarn(const char *fmt, va_list args)
+static void vwarn( const char *fmt, va_list args )
 {
 	if (progname) fprintf(stderr, "%s: ", progname);
 	vfprintf(stderr, fmt, args);
 	putc('\n', stderr);
 }
 
-void
-warn(const char *fmt, ...)
+void warn( const char *fmt, ... )
 {
 	va_list args;
 	va_start(args, fmt);
@@ -32,8 +30,7 @@ warn(const char *fmt, ...)
 	va_end(args);
 }
 
-void
-die(const char *fmt, ...)
+void die( const char *fmt, ... )
 {
 	va_list args;
 	va_start(args, fmt);
@@ -42,8 +39,7 @@ die(const char *fmt, ...)
 	exit(EXIT_FAILURE);
 }
 
-void
-bang(const char *fmt, ...)
+void bang( const char *fmt, ... )
 {
 	const char *err = strerror(errno);
 	va_list args;
@@ -54,14 +50,12 @@ bang(const char *fmt, ...)
 	exit(EXIT_FAILURE);
 }
 
-static void
-space(int k)
+static void space( int k )
 {
 	while (k--) putchar(' ');
 }
 
-void
-print_options(const struct option *opt)
+void print_options( const struct option *opt )
 {
 	int len, max;
 	const struct option *p;
@@ -100,8 +94,7 @@ print_options(const struct option *opt)
 	}
 }
 
-void
-parse_arguments(int *argc, char ***argv, const struct option *options)
+void parse_arguments( int *argc, char ***argv, const struct option *options )
 {
 	char *opt, *arg;
 	size_t len = 0;

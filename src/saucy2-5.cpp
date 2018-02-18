@@ -11,18 +11,14 @@
  */
 
 
-//#include <stdlib.h> /* malloc, calloc, and free */
-//#include <string.h> /* memcpy */
-//#include <stdint.h>
+//#include <cstdio>
 #include <cstdlib> /* malloc, calloc, and free */
 #include <cstring> /* memcpy */
 #include <cstdint>
 
 #include "saucy.h"
 
-/* #define DCCOUNT(i, j) (s->dccount[(i)*s->e + (j)]) */
 #define DCCOUNT(i, j) (s->dccount[(i)*s->wcount + (j)])
-/* TODO: consider using unsigned ints/longs for everything */
 
 struct coloring {
     int *lab;        /* Labelling of objects */
@@ -34,17 +30,8 @@ struct coloring {
 struct saucy {
     /* Graph data */
     uint64_t n;           /* Size of domain */
-    /*int e;*/           /* number of edges */
     uint64_t wcount;      /* number of edge colors */
-    /* for( i = adj[k]; i < adj2[k]; i++ ){ edg[i]; }*/
     const int *adj;  /* Neighbors of k: edg[adj[k]]..edg[adj[k+1]] */
-    const int *adj2;  /* Neighbors of k: edg[adj[k]]..edg[adj[k+1]] */
-    const int *edg;  /* Actual neighbor data */
-    const int *wght;  /* Actual edge colors */
-    const int *dadj; /* Fanin neighbor indices, for digraphs */
-    const int *dadj2; /* Fanin neighbor indices, for digraphs */
-    const int *dedg; /* Fanin neighbor data, for digraphs */
-    const int *dwght; /* Fanin weight data, for digraphs */
     void *arg;       /* Opaque client data */
 
     /* Coloring data */
@@ -134,19 +121,6 @@ array_find_min(const int *a, int n)
     }
     return min - start;
 }
-
-/*
-static int
-list_search( int *list, int key, int len, int *ndx )
-{
-    for( *ndx = 0; *ndx < len; ++(*ndx)){
-        if( list[*ndx] == key ) 
-            return 1;
-    }
-
-    return 0;
-}
-*/
 
 static void
 swap(int *a, int x, int y)
@@ -341,49 +315,56 @@ data_count(struct saucy *s, struct coloring *c, int k)
 }
 
 static int
-//check_mapping(struct saucy *s, const int *adj, const int *edg, const int *wght, int k)
-check_mapping( struct saucy *s, const int *adj, const int *adj2, const int *edg,
-               const int *wght, int k )
+check_mapping( struct saucy *s, const int *adj, int k, int col )
 {
-    int i, gk, ret = 1;
+    int i, gk, ret = 1, idx;
 
     /* Mark gamma of neighbors */
-    //for (i = adj[k]; i != adj[k+1]; ++i) {
-    for (i = adj[k]; i != adj2[k]; ++i) {
-        s->stuff[s->gamma[edg[i]]] = 1;
-        /* wstuff should only need n spots since a vertex */
-        /* can connect to at most n vertices */
-        s->wstuff[s->gamma[edg[i]]] = wght[i];
+    for( i = 0; i < s->n; i++ )
+    {
+        idx = (col) ? i*(s->n)+k : k*(s->n)+i;
+        if( adj[idx] != 0 )
+        {
+            s->stuff[s->gamma[i]] = 1;
+            s->wstuff[s->gamma[i]] = adj[idx];
+        }
     }
 
     /* Check neighbors of gamma */
     gk = s->gamma[k];
-    //for (i = adj[gk]; ret && i != adj[gk+1]; ++i) {
-    for (i = adj[gk]; ret && i != adj2[gk]; ++i) {
-        ret = s->stuff[edg[i]];
-        /* TODO: verify that this is a valid test for weight data */
-        ret = ret && (wght[i] == s->wstuff[edg[i]]);
+    for( i = 0; ret && i < s->n; i++ )
+    {
+        idx = (col) ? i*(s->n)+gk : gk*(s->n)+i;
+        if( adj[idx] != 0 )
+        {
+            ret = s->stuff[i];
+            ret = ret && ( adj[idx] == s->wstuff[i] );
+        }
     }
 
     /* Clear out bit vector before we leave */
-    //for (i = adj[k]; i != adj[k+1]; ++i) {
-    for (i = adj[k]; i != adj2[k]; ++i) {
-        s->stuff[s->gamma[edg[i]]] = 0;
-        s->wstuff[s->gamma[edg[i]]] = 0;
+    for( i = 0; i < s->n; i++ )
+    {
+        idx = (col) ? i*(s->n)+k : k*(s->n)+i;
+        if( adj[idx] != 0 )
+        {
+            s->stuff[s->gamma[i]] = 0;
+            s->wstuff[s->gamma[i]] = 0;
+        }
     }
 
     return ret;
 }
 
 static int
-is_undirected_automorphism(struct saucy *s)
+is_undirected_automorphism( struct saucy *s )
 {
     int i, j;
 
-    for (i = 0; i < s->ndiffs; ++i) {
+    for( i = 0; i < s->ndiffs; ++i )
+    {
         j = s->unsupp[i];
-        //if (!check_mapping(s, s->adj, s->edg, s->wght, j)) return 0;
-        if (!check_mapping(s, s->adj, s->adj2, s->edg, s->wght, j)) return 0;
+        if( !check_mapping( s, s->adj, j, 0 ) ) return 0;
     }
     return 1;
 }
@@ -395,10 +376,8 @@ is_directed_automorphism(struct saucy *s)
 
     for (i = 0; i < s->ndiffs; ++i) {
         j = s->unsupp[i];
-        //if (!check_mapping(s, s->adj, s->edg, s->wght, j)) return 0;
-        //if (!check_mapping(s, s->dadj, s->dedg, s->dwght, j)) return 0;
-        if (!check_mapping(s, s->adj, s->adj2, s->edg, s->wght, j)) return 0;
-        if (!check_mapping(s, s->dadj, s->dadj2, s->dedg, s->dwght, j)) return 0;
+        if( !check_mapping( s, s->adj, j, 0 ) ) return 0;
+        if( !check_mapping( s, s->adj, j, 1 ) ) return 0;
     }
     return 1;
 }
@@ -742,74 +721,56 @@ ref_single_cell(struct saucy *s, struct coloring *c, int cf)
 
 static int
 ref_singleton(struct saucy *s, struct coloring *c,
-    //const int *adj, const int *edg, const int *wght, int cf)
-    const int *adj, const int *adj2, const int *edg, const int *wght, int cf)
+    const int *adj, int cf, int col )
 {
-    int i, j, k = c->lab[cf], temp;
+    int i, j, k = c->lab[cf], temp, idx;
     int wcount = 0;
     int ret = 1;
-
-    //for( i = adj[k]; i != adj[k+1]; ++i ){
-    for( i = adj[k]; i != adj2[k]; ++i ){
-        /*
-            list of length p (number of edge colors)
-            dccount is n x p
-            dccount[color]++
-            then put index in subsequent row
-            or hash?
-        */
-
-        /*
-        if( !list_search( s->diffL, wght[i], wcount, &ndx ) ){ 
-            s->diffL[ndx] = wght[i];
-            DCCOUNT(0, ndx) = 1;
-            DCCOUNT(1, ndx) = i;
-            ++wcount;
-        }else{
-            ++DCCOUNT(0, ndx);
-            temp = DCCOUNT(0, ndx);
-            DCCOUNT(temp, ndx) = i;
+    
+    for( i = 0; i < s->n; ++i )
+    {
+        idx = (col) ? i*(s->n) + k : k*(s->n) + i;
+        if( adj[idx] != 0 )
+        {
+            if( !DCCOUNT( 0, adj[idx] ) )
+            {
+                s->diffL[wcount] = adj[idx];
+                ++wcount;
+            }
+            ++DCCOUNT( 0, adj[idx] );
+            temp = DCCOUNT( 0, adj[idx] );
+            DCCOUNT( temp, adj[idx] ) = i;
         }
-        */
-        if( !DCCOUNT(0, wght[i]) ){
-            s->diffL[wcount] = wght[i];
-            ++wcount;
-        }
-        ++DCCOUNT(0, wght[i]);
-        temp = DCCOUNT(0, wght[i]);
-        DCCOUNT(temp, wght[i]) = i;
-        
     }
-
-    for( j = 0; j < wcount && ret; ++j ){
-        for( i = 1; i <= DCCOUNT(0, s->diffL[j]); ++i ){
-            data_mark( s, c, edg[ DCCOUNT(i, s->diffL[j]) ] );
-            DCCOUNT(i, s->diffL[j]) = 0;
+    
+    for( j = 0; j < wcount && ret; ++j )
+    {
+        for( i = 1; i <= DCCOUNT( 0, s->diffL[j] ); ++i )
+        {
+            data_mark( s, c, DCCOUNT( i, s->diffL[j] ) ); //TODO: ???
+            DCCOUNT( i, s->diffL[j] ) = 0;
         }
 
-        ret = ret && refine_cell(s, c, ref_single_cell);
+        ret = ret && refine_cell( s, c, ref_single_cell );
         
-        DCCOUNT(0, s->diffL[j]) = 0;
+        DCCOUNT( 0, s->diffL[j] ) = 0;
         s->diffL[j] = 0;
     }
-
+    
     return ret;
 }
 
 static int
 ref_singleton_directed(struct saucy *s, struct coloring *c, int cf)
 {
-    //return ref_singleton(s, c, s->adj, s->edg, s->wght, cf)
-    //    && ref_singleton(s, c, s->dadj, s->dedg, s->dwght, cf);
-    return ref_singleton(s, c, s->adj, s->adj2, s->edg, s->wght, cf)
-        && ref_singleton(s, c, s->dadj, s->dadj2, s->dedg, s->dwght, cf);
+    return ref_singleton( s, c, s->adj, cf, 0 )
+        && ref_singleton( s, c, s->adj, cf, 1 );
 }
 
 static int
-ref_singleton_undirected(struct saucy *s, struct coloring *c, int cf)
+ref_singleton_undirected( struct saucy *s, struct coloring *c, int cf )
 {
-    //return ref_singleton(s, c, s->adj, s->edg, s->wght, cf);
-    return ref_singleton(s, c, s->adj, s->adj2, s->edg, s->wght, cf);
+    return ref_singleton(s, c, s->adj, cf, 0 );
 }
 
 static int
@@ -871,69 +832,64 @@ ref_nonsingle_cell( struct saucy *s, struct coloring *c, int cf )
 
 static int
 ref_nonsingle(struct saucy *s, struct coloring *c,
-    //const int *adj, const int *edg, const int *wght, int cf)
-    const int *adj, const int *adj2, const int *edg, const int *wght, int cf)
+    const int *adj, int cf, int col )
 {
-    int i, j, k, temp;
+    int i, j, k, temp, idx;
     int wcount = 0;
     int ret = 1;
     const int cb = cf + c->clen[cf];
     const int size = cb - cf + 1;
 
     /* Double check for nonsingles which became singles later */
-    if (cf == cb) {
-        //return ref_singleton(s, c, adj, edg, wght, cf);
-        return ref_singleton(s, c, adj, adj2, edg, wght, cf);
+    if( cf == cb )
+    {
+        return ref_singleton( s, c, adj, cf, 0 );
     }
-
+    
     /* Establish connected list */
     /* junk holds the cell used for refining the others */
     /* this cell doesn't change in the course of refinement */
-    memcpy(s->junk, c->lab + cf, size * sizeof(int));
-    for( i = 0; i < size; ++i ){
+    memcpy( s->junk, c->lab + cf, size * sizeof(int) );
+    for( i = 0; i < size; ++i )
+    {
         k = s->junk[i];
-        //for( j = adj[k]; j != adj[k+1]; ++j ){
-        for( j = adj[k]; j != adj2[k]; ++j ){
-            if( !DCCOUNT(0, wght[j]) ){
-                s->diffL[wcount] = wght[j];
-                ++wcount;
+        for( j = 0; j < s->n; j++ )
+        {
+            idx = (col) ? j*(s->n)+k : k*(s->n)+j;
+            if( adj[idx] != 0 )
+            {
+                if( !DCCOUNT( 0, adj[idx] ) )
+                {
+                    s->diffL[wcount] = adj[idx];
+                    ++wcount;
+                }
+                ++DCCOUNT( 0, adj[idx] );
+                temp = DCCOUNT( 0, adj[idx] );
+                DCCOUNT( temp, adj[idx] ) = j;
             }
-            ++DCCOUNT(0, wght[j]);
-            temp = DCCOUNT(0, wght[j]);
-            DCCOUNT(temp, wght[j]) = j;
-            
-            /*
-            if( !list_search( s->diffL, wght[j], wcount, &ndx ) ){
-                s->diffL[ndx] = wght[j];
-                DCCOUNT(0, ndx) = 1;
-                DCCOUNT(1, ndx) = j;
-                ++wcount; 
-            }else{
-                ++DCCOUNT(0, ndx);
-                temp = DCCOUNT(0, ndx);
-                DCCOUNT(temp, ndx) = j;
-            }
-            */
         }
     }
-
-    for( j = 0; j < wcount && ret; ++j ){
-        for( i = 1; i <= DCCOUNT(0, s->diffL[j]); ++i ){
-            data_count( s, c, edg[ DCCOUNT(i, s->diffL[j]) ] );
+    
+    for( j = 0; j < wcount && ret; ++j )
+    {
+        for( i = 1; i <= DCCOUNT( 0, s->diffL[j] ); ++i )
+        {
+            data_count( s, c, DCCOUNT( i, s->diffL[j] ) );
         }
 
         /* Refine the cells we're connected to with weight j */
         ret = ret && refine_cell( s, c, ref_nonsingle_cell );
 
         /* Clear the counts, including weight counts */
-        for( i = 1; i <= DCCOUNT(0, s->diffL[j]); ++i ){
-            s->ccount[edg[ DCCOUNT(i, s->diffL[j]) ]] = 0;
-            DCCOUNT(i, s->diffL[j]) = 0;
+        for( i = 1; i <= DCCOUNT( 0, s->diffL[j] ); ++i )
+        {
+            s->ccount[ DCCOUNT( i, s->diffL[j] ) ] = 0;
+            DCCOUNT( i, s->diffL[j] ) = 0;
         }
-        DCCOUNT(0, s->diffL[j]) = 0;
+        DCCOUNT( 0, s->diffL[j] ) = 0;
         s->diffL[j] = 0;
     }
-
+    
     return ret;
 }
 
@@ -941,18 +897,15 @@ static int
 ref_nonsingle_directed(struct saucy *s, struct coloring *c, int cf)
 {
     /* added weight data as a parameter - Schrock */
-    //return ref_nonsingle(s, c, s->adj, s->edg, s->wght, cf)
-    //    && ref_nonsingle(s, c, s->dadj, s->dedg, s->dwght, cf);
-    return ref_nonsingle(s, c, s->adj, s->adj2, s->edg, s->wght, cf)
-        && ref_nonsingle(s, c, s->dadj, s->dadj2, s->dedg, s->dwght, cf);
+    return ref_nonsingle( s, c, s->adj, cf, 0 )
+        && ref_nonsingle( s, c, s->adj, cf, 1 );
 }
 
 static int
 ref_nonsingle_undirected(struct saucy *s, struct coloring *c, int cf)
 {
     /* added weight data as a parameter - Schrock */
-    //return ref_nonsingle(s, c, s->adj, s->edg, s->wght, cf);
-    return ref_nonsingle(s, c, s->adj, s->adj2, s->edg, s->wght, cf);
+    return ref_nonsingle( s, c, s->adj, cf, 0 );
 }
 
 static void
@@ -1025,21 +978,29 @@ descend(struct saucy *s, struct coloring *c, int target, int min)
 
     /* This is the new enhancement in saucy 3.0 */
     if (c == &s->right && ret) {
-            int i, j, v, sum1, sum2, xor1, xor2;
+            int i, j, v, sum1, sum2, xor1, xor2, idx;
         for (i = s->nsplits - 1; i > s->splitlev[s->lev-1]; --i) {
             v = c->lab[s->splitwho[i]];
             sum1 = xor1 = 0;
-            //for (j = s->adj[v]; j < s->adj[v+1]; j++) {
-            for (j = s->adj[v]; j < s->adj2[v]; j++) {
-                sum1 += c->cfront[s->edg[j]];
-                xor1 ^= c->cfront[s->edg[j]];
+            for( j = 0; j < s->n; j++ ) 
+            {
+                idx = v*(s->n) + j;
+                if( s->adj[idx] != 0 )
+                {
+                    sum1 += c->cfront[j];
+                    xor1 ^= c->cfront[j];
+                }
             }
             v = s->left.lab[s->splitwho[i]];
             sum2 = xor2 = 0;
-            //for (j = s->adj[v]; j < s->adj[v+1]; j++) {
-            for (j = s->adj[v]; j < s->adj2[v]; j++) {
-                sum2 += s->left.cfront[s->edg[j]];
-                xor2 ^= s->left.cfront[s->edg[j]];
+            for( j = 0; j < s->n; j++ ) 
+            {
+                idx = v*(s->n) + j;
+                if( s->adj[idx] != 0 )
+                {
+                    sum2 += s->left.cfront[j];
+                    xor2 ^= s->left.cfront[j];
+                }
             }
             if ((sum1 != sum2) || (xor1 != xor2)) {
                 ret = 0;
@@ -1047,17 +1008,25 @@ descend(struct saucy *s, struct coloring *c, int target, int min)
             }
             v = c->lab[s->splitfrom[i]];
             sum1 = xor1 = 0;
-            //for (j = s->adj[v]; j < s->adj[v+1]; j++) {
-            for (j = s->adj[v]; j < s->adj2[v]; j++) {
-                sum1 += c->cfront[s->edg[j]];
-                xor1 ^= c->cfront[s->edg[j]];
+            for( j = 0; j < s->n; j++ ) 
+            {
+                idx = v*(s->n) + j;
+                if( s->adj[idx] != 0 )
+                {
+                    sum1 += c->cfront[j];
+                    xor1 ^= c->cfront[j];
+                }
             }
             v = s->left.lab[s->splitfrom[i]];
             sum2 = xor2 = 0;
-            //for (j = s->adj[v]; j < s->adj[v+1]; j++) {
-            for (j = s->adj[v]; j < s->adj2[v]; j++) {
-                sum2 += s->left.cfront[s->edg[j]];
-                xor2 ^= s->left.cfront[s->edg[j]];
+            for( j = 0; j < s->n; j++ ) 
+            {
+                idx = v*(s->n) + j;
+                if( s->adj[idx] != 0 )
+                {
+                    sum2 += s->left.cfront[j];
+                    xor2 ^= s->left.cfront[j];
+                }
             }
             if ((sum1 != sum2) || (xor1 != xor2)) {
                 ret = 0;
@@ -1210,6 +1179,7 @@ update_theta(struct saucy *s)
             s->thnext[s->thprev[y]] = s->thnext[y];
             s->thprev[s->thnext[y]] = s->thprev[y];
             s->threp[s->thfront[y]] = s->thnext[y];
+            s->stats->orbits--; //NOTE: orbit tracker here
         }
     }
 }
@@ -1539,13 +1509,6 @@ saucy_search(
     /*s->e = g->e;*/
     s->wcount = g->w;
     s->adj = g->adj;
-    s->adj2 = g->adj2;
-    s->edg = g->edg;
-    s->wght = g->wght;
-    s->dadj = g->adj + g->n;
-    s->dadj2 = g->adj2 + g->n;
-    s->dedg = g->edg + g->e;
-    s->dwght = g->wght + g->e;
 
     /* Polymorphism */
     if (directed) {
@@ -1600,6 +1563,7 @@ saucy_search(
     s->stats->grpsize_exp = 0;
     s->stats->nodes = 1;
     s->stats->bads = s->stats->gens = s->stats->support = 0;
+    s->stats->orbits = s->n;
 
     /* Prepare for refinement */
     s->nninduce = s->nsinduce = 0;

@@ -12,7 +12,7 @@ COINDIR=/Users/jschrock/CoinUtils/build
 IDIR =../inc
 CC=g++
 #CC=gcc
-CFLAGS=-ansi -pedantic -Wall -O3 -I$(IDIR)
+CFLAGS=-pedantic -Wall -O3 -I$(IDIR)
 #LDFLAGS=-shared
 #CFLAGS=-ansi -pedantic -Wall -O0 -g -I$(IDIR)
 LDLIBS=-lz
@@ -28,7 +28,7 @@ DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
 #_OBJ0 = util.o saucy0.o saucyio.o main.o
 #_OBJ2-5 = util.o saucy2-5.o saucyio.o main.o
-_OBJ2-5 = util.o saucy2-5.o saucyio.o LP2Graph.o
+_OBJ2-5 = util.o saucy2-5.o amorph.o LP2Graph.o
 #OBJ0 = $(patsubst %,$(ODIR)/%,$(_OBJ0))
 OBJ2-5 = $(patsubst %,$(ODIR)/%,$(_OBJ2-5))
 
@@ -42,7 +42,8 @@ $(ODIR)/util.o: util.cpp $(DEPS)
 $(ODIR)/saucy2-5.o: saucy2-5.cpp $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-$(ODIR)/saucyio.o: saucyio.cpp $(DEPS)
+#$(ODIR)/saucyio.o: saucyio.cpp $(DEPS)
+$(ODIR)/amorph.o: amorph.cpp $(DEPS)
 	$(CC) -c -o $@ $(LPLIB) $(LPINC) $< $(CFLAGS)
 
 $(ODIR)/LP2Graph.o: LP2Graph.cpp $(DEPS)
