@@ -5,17 +5,23 @@
 #include <ctime>
 #include <cstring>
 #include <cctype>
+#include <csignal>
 
 // Saucy headers
 #include "saucy.h"
 #include "amorph.h"
 #include "util.h"
+#include "platform.h"
 
 //NOTE: should be possible to do with original saucy structs afterall
 //      think more on how to do this, it would be preferable I suppose
-//TODO: do I need the timeout stuff from LP2Graph?
+//TODO: use original saucy, this seems too slow, figure out how to fix...
+//      just make a check at the DCCOUNT part that wght > 0
+//      also, make edge_prob emulate edg and wght in structure?
 using namespace std;
 
+static sig_atomic_t timeout_flag = 0; /* Has the alarm gone off yet? */
+static int quiet_mode = 1;  /* Don't output automorphisms */
 static int seed = 123456789;
 static int POPSIZE = 100;
 static int MAXGENS = 1000;
@@ -25,12 +31,14 @@ static double LEARNRATE = 0.1;
 static int K = 0;
 static int LP = 0;
 
-//struct edge_t
-//{
-//    int u;
-//    int v;
-//    int idxa; //index into adjaceny array
-//};
+struct edge_t
+{
+    //int u;
+    //int v;
+    int idxu;
+    int idxv;
+    double prob;
+};
 
 struct e_t
 {
@@ -45,11 +53,10 @@ struct gene_t
     int len;
 };
 
-//int numEdges;
-int N;
-//struct edge_t *nel;
+int numEdges;
 struct gene_t *pop;
-double *edge_prob; //2D array matching ng->sg.adj but with probs in place of weights?
+double *edge_prob;
+struct edge_t *edge_prob;
 
 // Saucy structs
 struct saucy *s;
@@ -103,6 +110,8 @@ static void arg_seed( char *arg )
     seed = atoi( arg );
     if( seed <= 0 ) die( "seed must be positive" );
 }
+
+static void arg_help( char *arg );
 
 static struct option options[] = {
     { "popsize", 'p', "N", arg_popsize,
@@ -249,7 +258,7 @@ static int on_automorphism( int n, const int *gamma, int k, int *support, void *
 //      edge, just some of the weight
 void evaluate( int &idxB, int &idxW )
 {
-    int mem, i, idx;
+    int mem, i, idxu, idxv;
     int fitB = INT_MAX, fitW = -1;
     
     for( mem = 0; mem < POPSIZE; mem++ )
@@ -257,13 +266,15 @@ void evaluate( int &idxB, int &idxW )
         // Remove weights from population member
         for( i = 0; i < pop[mem].len; i++ )
         {
-            idx = pop[mem].gene[i].idx;
-            ng->sg.adj[idx] -= pop[mem].gene[i].wght;
+            idxu = edge_prob[pop[mem].gene[i].idx].idxu;
+            idxv = edge_prob[pop[mem].gene[i].idx].idxv;
+            ng->sg.wght[idxu] -= pop[mem].gene[i].wght;
+            ng->sg.wght[idxv] -= pop[mem].gene[i].wght;
         }
         
         //TODO: get this right
         // Call saucy
-        saucy_search( s, &ng->sg, 0, g->colors, on_automorphism,
+        saucy_search( s, &ng->sg, 0, ng->colors, on_automorphism,
                       ng, &stats );
         pop[mem].fitness = stats.orbits;
         if( pop[mem].fitness < fitB )
@@ -280,8 +291,10 @@ void evaluate( int &idxB, int &idxW )
         // Return the weights to the graph
         for( i = 0; i < pop[mem].len; i++ )
         {
-            idx = pop[mem].gene[i].idx;
-            ng->sg.adj[idx] += pop[mem].gene[i].wght;
+            idxu = edge_prob[pop[mem].gene[i].idx].idxu;
+            idxv = edge_prob[pop[mem].gene[i].idx].idxv;
+            ng->sg.wght[idxu] -= pop[mem].gene[i].wght;
+            ng->sg.wght[idxv] -= pop[mem].gene[i].wght;
         }
     }
     
@@ -294,15 +307,17 @@ void update( int idxB, int idxW )
     int i, j;
     bool inB;
     
+    //pop[idx].gene = { int u; int v; int wght; }
+    //len(edge_prob) == ng->sg.e
     //for( i = 0; i < numEdges; i++ )
-    for( i = 0; i < N; i++ )
+    //TODO: for this, no longer assume edge[i] is 0 or 1 but instead can be any
+    //      value between wght[i]-K and wght[i]
+    //      how is the learning done then?
+    for( i = 0; i < numEdges; i++ )
     {
-        if( edge_prob[i] > 0.0 )
-        {
-            inB = isIn( i, pop[idxB].gene, pop[idxB].len );
-            edge_prob[i] = edge_prob[i]*( 1.0 - LEARNRATE ) +
-                           ( inB ? LEARNRATE : 0 );
-        }
+        inB = isIn( i, pop[idxB].gene, pop[idxB].len );
+        edge_prob[i].prob = edge_prob[i].prob*( 1.0 - LEARNRATE ) +
+                            ( inB ? LEARNRATE : 0 );
     }
     
     return;
@@ -312,39 +327,57 @@ void update( int idxB, int idxW )
 //void initialize( string filename, int &seed )
 void initialize( string filename )
 {
-    int i, j, temp, temp2, idx, start, idxa;
+    int i, j, k, v, temp, idx, start;
     double rnum;
     
     ng = (LP) ? read_lp( filename.c_str() ) : read_graph( filename.c_str() );
     if( !ng ) die( "unable to read input file" );
     
     pop = (struct gene_t*)malloc( (POPSIZE+1)*sizeof(struct gene_t) );
-    N = (ng->sg.n)*(ng->sg.n);
-    edge_prob = (double *)malloc( N*sizeof(double) );
+    numEdges = ng->sg.e;
+    edge_prob = (double *)malloc( numEdges*sizeof(double) );
     
     // Allocate some memory to facilitate printing
     marks = (char *)calloc( ng->sg.n, sizeof(char) );
     if( !marks ) die( "out of memory" );
     
     // Allocate saucy space
-    s = (struct saucy*)saucy_alloc( ng->sg.nn, ng->sg.w );
+    s = (struct saucy*)saucy_alloc( ng->sg.n, ng->sg.w );
     if( s == NULL ) die( "saucy initialization failed" );
     
-    for( i = 0; i < N; i++ )
+    for( i = 0, idx = 0; i < ng->sg.n; i++ )
     {
-        edge_prob[i] = (ng->sg.adj[i] != 0) ? 0.5 : 0.0;
+        for( j = ng->sg.adj[i]; j != ng->sg.adj[i+1]; j++ )
+        {
+            v = ng->sg.edg[j];
+            if( v > i )
+            {
+                for( k = ng->sg.adj[v]; k != ng->sg.adj[v+1]; k++ )
+                {
+                    if( ng->sg.edg[k] == i )
+                    {
+                        edge_prob[idx].idxu = k;
+                        break;
+                    }
+                }
+                edge_prob[idx].idxv = j;
+                edge_prob[idx].prob = 0.5;
+                idx++;
+            }
+        }
     }
     
     //  Initialize population members 
     for( i = 0; i < POPSIZE; i++ )
     {
         pop[i].fitness = 0;
+        //TODO: may end up needing different size for gene
         pop[i].gene = (struct e_t*)malloc( K*sizeof(struct e_t) );
     }
     
     // Initialize the location that holds the best seen individual
     pop[POPSIZE].fitness = INT_MAX;
-    pop[POPSZIE].gene = (struct e_t*)malloc( K*sizeof(struct e_t) );
+    pop[POPSIZE].gene = (struct e_t*)malloc( K*sizeof(struct e_t) );
     pop[POPSIZE].len = 0;
     
     return;
@@ -356,7 +389,7 @@ void initialize( string filename )
 //      edge, just some of the weight
 void generate()
 {
-    int i, j, edges, temp, idx;
+    int i, j, edges, temp, idx, idxw;
     int start;
     double rnum;
     
@@ -365,35 +398,34 @@ void generate()
     {
         pop[i].fitness = 0;
         
+        //TODO: for general weighted graphs, choose a budget B <= K
+        //      while... choose edge, select R=rand(0,B)
+        //      remove R from edge weight, repeat until full budget used up
         edges = i4_uniform_ab( 0, K );
         start = i4_uniform_ab( 0, N-1 );
         
-        for( idx = start, temp = 0; idx < N && temp < edges; idx++ )
+        for( idx = start, temp = 0; idx < numEdges && temp < edges; idx++ )
         {
-            if( edge_prob[idx] > 0.0 )
+            rnum = r8_uniform_ab( 0.0, 1.0 );
+            if( rnum < edge_prob[idx].prob )
             {
-                rnum = r8_uniform_ab( 0.0, 1.0 );
-                if( rnum < edge_prob[idx] )
-                {
-                    pop[i].gene[temp].idx = idx;
-                    pop[i].gene[temp].wght = ng->sg.adj[idx];
-                    temp++;
-                }
+                pop[i].gene[temp].idx = idx;
+                idxw = edge_prob[idx].idxu;
+                pop[i].gene[temp].wght = ng->sg.wght[idxu];
+                temp++;
             }
         }
         if( temp < edges && start != 0 )
         {
             for( idx = 0; idx < start && temp < edges; idx++ )
             {
-                if( edge_prob[idx] > 0.0 )
+                rnum = r8_uniform_ab( 0.0, 1.0 );
+                if( rnum < edge_prob[idx].prob )
                 {
-                    rnum = r8_uniform_ab( 0.0, 1.0 );
-                    if( rnum < edge_prob[idx] )
-                    {
-                        pop[i].gene[temp].idx = idx;
-                        pop[i].gene[temp].wght = ng->sg.adj[idx];
-                        temp++;
-                    }
+                    pop[i].gene[temp].idx = idx;
+                    idxw = edge_prob[idx].idxu;
+                    pop[i].gene[temp].wght = ng->sg.wght[idxu];
+                    temp++;
                 }
             }
         }
@@ -410,17 +442,14 @@ void mutate()
     int i, inum;
     double rnum;
     
-    for( i = 0; i < N; i++ )
+    for( i = 0; i < numEdges; i++ )
     {
-        if( edge_prob[i] > 0.0 )
+        rnum = r8_uniform_ab( 0.0, 1.0 );
+        if( rnum < PMUTATION )
         {
-            rnum = r8_uniform_ab( 0.0, 1.0 );
-            if( rnum < PMUTATION )
-            {
-                inum = i4_uniform_ab( 0, 1 );
-                edge_prob[i] = edge_prob[i]*(1.0-MUTSHIFT) +
-                               ( inum ? MUTSHIFT : 0);
-            }
+            inum = i4_uniform_ab( 0, 1 );
+            edge_prob[i].prob = edge_prob[i].prob*(1.0-MUTSHIFT) +
+                                ( inum ? MUTSHIFT : 0);
         }
     }
     
@@ -450,6 +479,11 @@ int main( int argc, char *argv[] )
     initialize( filename );
     for( generation = 0; generation < MAXGENS; generation++ )
     {
+        if( generation%100 == 0 )
+        {
+            cout << " Generation " << generation << endl;
+        }
+        
         generate();
         evaluate( idxB, idxW ); //set idx's here
         if( pop[idxB].fitness < pop[POPSIZE].fitness )
@@ -468,11 +502,11 @@ int main( int argc, char *argv[] )
     
     // Print edge data
     cout << "\n";
-    for( i = 0; i < N; i++ )
+    for( i = 0; i < numEdges; i++ )
     {
-        if( edge_prob[i] > 0.05 )
+        if( edge_prob[i].prob > 0.05 )
         {
-            cout << i << " " << edge_prob[i] << "\n";
+            cout << i << " " << edge_prob[i].prob << "\n";
         }
     }
     cout << "\n";
@@ -483,16 +517,17 @@ int main( int argc, char *argv[] )
     cout << "\n";
     for( i = 0; i < pop[POPSIZE].len; i++ )
     {
-        cout << "  gene[" << i << "] = " << pop[POPSIZE].gene[i].idx << " ("
-             << pop[POPSIZE].gene[i].idx/(ng->sg.n) << ", "
-             << pop[POPSIZE].gene[i].idx%(ng->sg.n) << ")\n";
+        //cout << "  gene[" << i << "] = " << pop[POPSIZE].gene[i].idx << " ("
+        //     << pop[POPSIZE].gene[i].idx << ", "
+        //     << pop[POPSIZE].gene[i].idx << ")\n";
+        cout << "  gene[" << i << "] = " << pop[POPSIZE].gene[i].idx << endl;
     }
     cout << "\n";
     cout << "  Best fitness = " << pop[POPSIZE].fitness << "\n";
     
     // Clean up and terminate
-    suacy_free( s );
-    g->free( g );
+    saucy_free( s );
+    ng->free( ng );
     free( marks );
     for( i = 0; i <= POPSIZE; i++ )
     {

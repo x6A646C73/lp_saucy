@@ -29,11 +29,16 @@ DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 #_OBJ0 = util.o saucy0.o saucyio.o main.o
 #_OBJ2-5 = util.o saucy2-5.o saucyio.o main.o
 _OBJ2-5 = util.o saucy2-5.o amorph.o LP2Graph.o
+_OBJFIND = util.o saucy2-5.o amorph.o findAlmost.o
 #OBJ0 = $(patsubst %,$(ODIR)/%,$(_OBJ0))
 OBJ2-5 = $(patsubst %,$(ODIR)/%,$(_OBJ2-5))
+OBJFIND = $(patsubst %,$(ODIR)/%,$(_OBJFIND))
 
-#TODO: make saucy a shared library and link to it in LP2Graph
+#TODO: make rule for findAlmostPBIL
 saucy2-5: $(OBJ2-5)
+	$(CC) -o $(BIN)/$@ $^ $(CFLAGS) $(LDLIBS) $(LPLIB) $(LPINC)
+
+findAlmost: $(OBJFIND)
 	$(CC) -o $(BIN)/$@ $^ $(CFLAGS) $(LDLIBS) $(LPLIB) $(LPINC)
 
 $(ODIR)/util.o: util.cpp $(DEPS)
@@ -49,12 +54,15 @@ $(ODIR)/amorph.o: amorph.cpp $(DEPS)
 $(ODIR)/LP2Graph.o: LP2Graph.cpp $(DEPS)
 	$(CC) -c -o $@ $(LPLIB) $(LPINC) $< $(CFLAGS)
 
+$(ODIR)/findAlmost.o: findAlmostPBIL_saucy.cpp $(DEPS)
+	$(CC) -c -o $@ $(LPLIB) $(LPINC) $< $(CFLAGS)
+
 #$(ODIR)/%.o: %.c $(DEPS)
 #	$(CC) -c -o  $@ $< $(CFLAGS)
 
 #all: saucy0 saucy2-5 LP2Graph
 #all: ${TARGET_LIB} LP2Graph
-all: saucy2-5
+all: saucy2-5 findAlmost
 
 #Build saucy with weighted edges, no change to refinement
 #saucy0: $(OBJ0)
