@@ -343,19 +343,27 @@ check_mapping(struct saucy *s, const int *adj, const int *edg, const int *wght, 
     int i, gk, ret = 1;
 
     /* Mark gamma of neighbors */
-    for (i = adj[k]; i != adj[k+1]; ++i) {
-        s->stuff[s->gamma[edg[i]]] = 1;
-        /* wstuff should only need n spots since a vertex */
-        /* can connect to at most n vertices */
-        s->wstuff[s->gamma[edg[i]]] = wght[i];
+    for( i = adj[k]; i != adj[k+1]; ++i )
+    {
+        if( wght[i] != 0 )
+        {
+            s->stuff[s->gamma[edg[i]]] = 1;
+            /* wstuff should only need n spots since a vertex */
+            /* can connect to at most n vertices */
+            s->wstuff[s->gamma[edg[i]]] = wght[i];
+        }
     }
 
     /* Check neighbors of gamma */
     gk = s->gamma[k];
-    for (i = adj[gk]; ret && i != adj[gk+1]; ++i) {
-        ret = s->stuff[edg[i]];
-        /* TODO: verify that this is a valid test for weight data */
-        ret = ret && (wght[i] == s->wstuff[edg[i]]);
+    for( i = adj[gk]; ret && i != adj[gk+1]; ++i )
+    {
+        if( wght[i] != 0 )
+        {
+            ret = s->stuff[edg[i]];
+            /* TODO: verify that this is a valid test for weight data */
+            ret = ret && (wght[i] == s->wstuff[edg[i]]);
+        }
     }
 
     /* Clear out bit vector before we leave */
@@ -737,35 +745,19 @@ ref_singleton(struct saucy *s, struct coloring *c,
     int wcount = 0;
     int ret = 1;
 
-    for( i = adj[k]; i != adj[k+1]; ++i ){
-        /*
-            list of length p (number of edge colors)
-            dccount is n x p
-            dccount[color]++
-            then put index in subsequent row
-            or hash?
-        */
-
-        /*
-        if( !list_search( s->diffL, wght[i], wcount, &ndx ) ){ 
-            s->diffL[ndx] = wght[i];
-            DCCOUNT(0, ndx) = 1;
-            DCCOUNT(1, ndx) = i;
-            ++wcount;
-        }else{
-            ++DCCOUNT(0, ndx);
-            temp = DCCOUNT(0, ndx);
-            DCCOUNT(temp, ndx) = i;
+    for( i = adj[k]; i != adj[k+1]; ++i )
+    {
+        if( wght[i] != 0 )
+        {
+            if( !DCCOUNT(0, wght[i]) )
+            {
+                s->diffL[wcount] = wght[i];
+                ++wcount;
+            }
+            ++DCCOUNT(0, wght[i]);
+            temp = DCCOUNT(0, wght[i]);
+            DCCOUNT(temp, wght[i]) = i;
         }
-        */
-        if( !DCCOUNT(0, wght[i]) ){
-            s->diffL[wcount] = wght[i];
-            ++wcount;
-        }
-        ++DCCOUNT(0, wght[i]);
-        temp = DCCOUNT(0, wght[i]);
-        DCCOUNT(temp, wght[i]) = i;
-        
     }
 
     for( j = 0; j < wcount && ret; ++j ){
@@ -862,59 +854,55 @@ ref_nonsingle(struct saucy *s, struct coloring *c,
     int ret = 1;
     const int cb = cf + c->clen[cf];
     const int size = cb - cf + 1;
-
+    
     /* Double check for nonsingles which became singles later */
-    if (cf == cb) {
+    if( cf == cb )
+    {
         return ref_singleton(s, c, adj, edg, wght, cf);
     }
-
+    
     /* Establish connected list */
     /* junk holds the cell used for refining the others */
     /* this cell doesn't change in the course of refinement */
     memcpy(s->junk, c->lab + cf, size * sizeof(int));
     for( i = 0; i < size; ++i ){
         k = s->junk[i];
-        for( j = adj[k]; j != adj[k+1]; ++j ){
-            if( !DCCOUNT(0, wght[j]) ){
-                s->diffL[wcount] = wght[j];
-                ++wcount;
+        for( j = adj[k]; j != adj[k+1]; ++j )
+        {
+            if( wght[j] != 0 )
+            {
+                if( !DCCOUNT(0, wght[j]) )
+                {
+                    s->diffL[wcount] = wght[j];
+                    ++wcount;
+                }
+                ++DCCOUNT(0, wght[j]);
+                temp = DCCOUNT(0, wght[j]);
+                DCCOUNT(temp, wght[j]) = j;
             }
-            ++DCCOUNT(0, wght[j]);
-            temp = DCCOUNT(0, wght[j]);
-            DCCOUNT(temp, wght[j]) = j;
-            
-            /*
-            if( !list_search( s->diffL, wght[j], wcount, &ndx ) ){
-                s->diffL[ndx] = wght[j];
-                DCCOUNT(0, ndx) = 1;
-                DCCOUNT(1, ndx) = j;
-                ++wcount; 
-            }else{
-                ++DCCOUNT(0, ndx);
-                temp = DCCOUNT(0, ndx);
-                DCCOUNT(temp, ndx) = j;
-            }
-            */
         }
     }
-
-    for( j = 0; j < wcount && ret; ++j ){
-        for( i = 1; i <= DCCOUNT(0, s->diffL[j]); ++i ){
+    
+    for( j = 0; j < wcount && ret; ++j )
+    {
+        for( i = 1; i <= DCCOUNT(0, s->diffL[j]); ++i )
+        {
             data_count( s, c, edg[ DCCOUNT(i, s->diffL[j]) ] );
         }
-
+        
         /* Refine the cells we're connected to with weight j */
         ret = ret && refine_cell( s, c, ref_nonsingle_cell );
-
+        
         /* Clear the counts, including weight counts */
-        for( i = 1; i <= DCCOUNT(0, s->diffL[j]); ++i ){
+        for( i = 1; i <= DCCOUNT(0, s->diffL[j]); ++i )
+        {
             s->ccount[edg[ DCCOUNT(i, s->diffL[j]) ]] = 0;
             DCCOUNT(i, s->diffL[j]) = 0;
         }
         DCCOUNT(0, s->diffL[j]) = 0;
         s->diffL[j] = 0;
     }
-
+    
     return ret;
 }
 
