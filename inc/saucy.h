@@ -10,6 +10,7 @@ struct saucy;
 struct saucy_stats {
     double grpsize_base;
     int grpsize_exp;
+    int orbits;
     int levels;
     int nodes;
     int bads;

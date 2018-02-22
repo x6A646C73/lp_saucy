@@ -1172,6 +1172,7 @@ update_theta(struct saucy *s)
             s->thnext[s->thprev[y]] = s->thnext[y];
             s->thprev[s->thnext[y]] = s->thprev[y];
             s->threp[s->thfront[y]] = s->thnext[y];
+            s->stats->orbits--; //Orbit stuff
         }
     }
 }
@@ -1559,6 +1560,7 @@ saucy_search(
     /* Initialize stats */
     s->stats->grpsize_base = 1.0;
     s->stats->grpsize_exp = 0;
+    s->stats->orbits = s->n;
     s->stats->nodes = 1;
     s->stats->bads = s->stats->gens = s->stats->support = 0;
 
