@@ -413,4 +413,3 @@ out_close:
 out:
     return g;
 }
-
