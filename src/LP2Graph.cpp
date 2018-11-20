@@ -11,8 +11,6 @@
 #include "CoinMpsIO.hpp"
 
 
-//TODO: move reading functions out of here...
-//      create lp_saucyio.{h,cpp}
 void amorph_graph_free( struct amorph_graph *g )
 {
     free(g->sg.adj);
@@ -25,7 +23,7 @@ static int init_fixadj1( int n, int *adj )
 {
     int val, sum, i;
 
-    /* Translate adj values to real locations */
+    // Translate adj values to real locations
     val = adj[0]; sum = 0; adj[0] = 0;
     for (i = 1; i < n; ++i) {
         sum += val;
@@ -39,7 +37,7 @@ static void init_fixadj2( int n, int e, int *adj )
 {
     int i;
 
-    /* Translate again-broken sizes to adj values */
+    // Translate again-broken sizes to adj values
     for (i = n-1; i > 0; --i) {
         adj[i] = adj[i-1];
     }
@@ -53,37 +51,37 @@ static void amorph_print_automorphism(
 {
     int i, j, k;
 
-    /* We presume support is already sorted */
+    // We presume support is already sorted
     for (i = 0; i < nsupp; ++i) {
         k = support[i];
 
-        /* Skip elements already seen */
+        // Skip elements already seen
         if (marks[k]) continue;
 
-        /* Start an orbit */
+        // Start an orbit
         marks[k] = 1;
         printf( "(%s", g->var_names[k] );
         //printf("(%d", k);
 
-        /* Mark and notify elements in this orbit */
+        // Mark and notify elements in this orbit
         for (j = gamma[k]; j != k; j = gamma[j]) {
             marks[j] = 1;
             printf( " %s", g->var_names[j] );
             //printf(" %d", j);
         }
 
-        /* Finish off the orbit */
+        // Finish off the orbit
         putchar(')');
     }
     putchar('\n');
 
-    /* Clean up after ourselves */
+    // Clean up after ourselves
     for (i = 0; i < nsupp; ++i) {
         marks[support[i]] = 0;
     }
 }
 
-/* return value >1 indicates error */
+// return value >1 indicates error
 static int dupe_check( int n, int *adj, int *edg )
 {
     int i, j, self_loop_ctr;
@@ -94,14 +92,13 @@ static int dupe_check( int n, int *adj, int *edg )
         return 2;
     }
 
-    /* Check outgoing edges of each vertex for duplicate endpoints */
+    // Check outgoing edges of each vertex for duplicate endpoints
     for (i = 0; i < n; ++i) {
         self_loop_ctr = 0;
         for (j = adj[i] ; j < adj[i+1] ; j++) {
-            /* Self-loops lead to two entries of edg[j]==i,
-             * so we check for those and only worry if we see
-             * 3 hits of edg[j]==i (which means 2 self-loops).
-             */
+            // Self-loops lead to two entries of edg[j]==i,
+            // so we check for those and only worry if we see
+            // 3 hits of edg[j]==i (which means 2 self-loops).
             if (edg[j] == i) {
                 ++self_loop_ctr;
                 if (self_loop_ctr > 2) {
@@ -110,11 +107,10 @@ static int dupe_check( int n, int *adj, int *edg )
                     return 1;
                 }
             }
-            /* If we have recorded this vertex as connected to i,
-             * we have a dupe.
-             * Using i+1 because we used calloc above, and 0 is
-             * a valid vertex index.
-             */
+            // If we have recorded this vertex as connected to i,
+            // we have a dupe.
+            // Using i+1 because we used calloc above, and 0 is
+            // a valid vertex index.
             else if (dupe_tmp[edg[j]] == i+1) {
                 warn("duplicate edge in input");
                 free(dupe_tmp);
@@ -128,7 +124,6 @@ static int dupe_check( int n, int *adj, int *edg )
     return 0;
 }
 
-//TODO: duplicate for lp files or regular graph files
 struct amorph_graph* amorph_read( const char *filename )
 {
     int i, j, vars, cons;
@@ -138,7 +133,7 @@ struct amorph_graph* amorph_read( const char *filename )
     CoinMpsIO prob;
     int n, e, *aout, *ain, *eout, *ein, *colors;
     int tempk, tempj;
-    int w, *wout, *win; /* weight data */
+    int w, *wout, *win; // weight data 
     int ndx;
     struct amorph_graph *g = NULL;
     char **var_names;
@@ -201,14 +196,14 @@ struct amorph_graph* amorph_read( const char *filename )
         strcpy( var_names[i+vars], prob.rowName(i) );
     }
     
-    /* Allocate everything */
+    // Allocate everything 
     //TODO: eventually allocate smarter, only allocate when needed, delete
     //      objects as they are no longer needed
     g = (struct amorph_graph*)malloc( sizeof(struct amorph_graph) );
     //aout = (int *)calloc( digraph ? (2*n+2) : (n+1), sizeof(int) );
     aout = (int *)calloc( (n+1), sizeof(int) );
     eout = (int *)malloc( 2 * e * sizeof(int) );
-    wout = (int *)malloc( 2 * e * sizeof(int) ); /* weight data */
+    wout = (int *)malloc( 2 * e * sizeof(int) ); // weight data 
     colors = (int *)malloc( n * sizeof(int) );
     if( !g || !aout || !eout || !colors ) goto out_free;
     
@@ -217,7 +212,7 @@ struct amorph_graph* amorph_read( const char *filename )
     g->sg.w = coColors.size();
     g->sg.adj = aout;
     g->sg.edg = eout;
-    g->sg.wght = wout; /* weight data */
+    g->sg.wght = wout; // weight data 
     g->colors = colors;
     g->var_names = var_names;
     
@@ -230,7 +225,7 @@ struct amorph_graph* amorph_read( const char *filename )
     for( i = 0; i < cons; i++ )
         colors[vars+i] = conColors.find(rhs[i])->second;
     
-    /* Count the size of each adjacency list */
+    // Count the size of each adjacency list 
     //j gives column (variable), i should give row (constraint)
     for( j = 0; j < vars; j++ )
     {
@@ -241,11 +236,11 @@ struct amorph_graph* amorph_read( const char *filename )
         }
     }
     
-    /* Fix that */
+    // Fix that 
     init_fixadj1( n, aout );
     //if( digraph ) init_fixadj1( n, ain );
     
-    /* Insert adjacencies */
+    // Insert adjacencies 
     for( j = 0; j < vars; j++ )
     {
         for( i = col_ind[j]; i < col_ind[j+1]; i++ )
@@ -258,7 +253,7 @@ struct amorph_graph* amorph_read( const char *filename )
         }
     }
 
-    /* Fix that too */
+    // Fix that too 
     //if( digraph )
     //{
     //    init_fixadj2( n, e, aout );
@@ -267,11 +262,11 @@ struct amorph_graph* amorph_read( const char *filename )
     //else
         init_fixadj2( n, 2 * e, aout );
     
-    /* Check for duplicate edges */
+    // Check for duplicate edges 
     if( dupe_check( n, aout, eout ) ) goto out_free;
     
-    /* Assign the functions */
-    /* TODO: determine if these functions need to be altered at all */
+    // Assign the functions 
+    // TODO: determine if these functions need to be altered at all 
     g->consumer = amorph_print_automorphism;
     g->free = amorph_graph_free;
     g->stats = NULL;
@@ -411,6 +406,7 @@ int main( int argc, char **argv )
     if( repeat > 1 ) quiet_mode = stats_mode = 1;
     
     /* Read the input file */
+    //g = read_lp( filename );
     g = amorph_read( filename );
     if( !g ) die( "unable to read input file" );
     n = g->sg.n;

@@ -737,15 +737,7 @@ ref_singleton(struct saucy *s, struct coloring *c,
     int wcount = 0;
     int ret = 1;
 
-    for( i = adj[k]; i != adj[k+1]; ++i ){
-        /*
-            list of length p (number of edge colors)
-            dccount is n x p
-            dccount[color]++
-            then put index in subsequent row
-            or hash?
-        */
-
+    for( i = adj[k]; i != adj[k+1]; i++ ){
         /*
         if( !list_search( s->diffL, wght[i], wcount, &ndx ) ){ 
             s->diffL[ndx] = wght[i];
@@ -758,18 +750,18 @@ ref_singleton(struct saucy *s, struct coloring *c,
             DCCOUNT(temp, ndx) = i;
         }
         */
+        //TODO: fix DCCOUNT, supposed to be 2d array, but not 2d with only one edge weight 
         if( !DCCOUNT(0, wght[i]) ){
             s->diffL[wcount] = wght[i];
-            ++wcount;
+            wcount++;
         }
-        ++DCCOUNT(0, wght[i]);
+        DCCOUNT(0, wght[i])++;
         temp = DCCOUNT(0, wght[i]);
         DCCOUNT(temp, wght[i]) = i;
-        
     }
 
-    for( j = 0; j < wcount && ret; ++j ){
-        for( i = 1; i <= DCCOUNT(0, s->diffL[j]); ++i ){
+    for( j = 0; j < wcount && ret; j++ ){
+        for( i = 1; i <= DCCOUNT(0, s->diffL[j]); i++ ){
             data_mark( s, c, edg[ DCCOUNT(i, s->diffL[j]) ] );
             DCCOUNT(i, s->diffL[j]) = 0;
         }
@@ -1671,12 +1663,14 @@ saucy_alloc(int n, int w)
     /* s->dccount = zeros(e*e); */
     /* TODO: some improvement likely available if number of 
              different weights recorded, s->dccount = zeros(w*n) */
-    s->dccount = zeros(w*n);
+    //s->dccount = zeros(w*n);
+    s->dccount = zeros((n*n+1)*w);
     /* s->diffL = (double *)malloc(n * n * sizeof(double)); */
     /* s->diffL = (int *)calloc(e, sizeof(int)); */ /* TODO: figure out if this is right */
     /* TODO: this becomes s->diffL = zeros(w) if number of different
              weights is recorded */
-    s->diffL = zeros(n);
+    //s->diffL = zeros(n);
+    s->diffL = zeros(w);
     s->clist = ints(n);
     s->nextnon = ints(n+1) + 1;
     s->prevnon = ints(n+1);
